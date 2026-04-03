@@ -1,0 +1,1092 @@
+{% extends "base.html" %}
+{% block title %}FitScan — Dashboard{% endblock %}
+
+{% block body_layout %}
+{# ── Dashboard Layout: Sidebar + Main ── #}
+<div class="app-layout">
+    {# ── Sidebar ── #}
+    <aside class="sidebar">
+        <a href="/" class="sidebar-brand">
+            <div class="sidebar-brand-icon">F</div>
+            <span class="sidebar-brand-text">FitScan</span>
+        </a>
+        <nav class="sidebar-nav">
+            <a href="/dashboard" class="sidebar-link active">
+                <span class="icon">&#x1F4CA;</span>
+                <span>Dashboard</span>
+            </a>
+            <a href="/scan" class="sidebar-link">
+                <span class="icon">&#x1F4F7;</span>
+                <span>Body Scan</span>
+            </a>
+            <a href="/exercise" class="sidebar-link">
+                <span class="icon">&#x1F3CB;</span>
+                <span>Exercise</span>
+            </a>
+            <a href="/diet" class="sidebar-link">
+                <span class="icon">&#x1F957;</span>
+                <span>Diet</span>
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout" class="sidebar-signout">Sign Out</a>
+        </div>
+    </aside>
+
+    {# ── Main Content ── #}
+    <main class="main-content">
+        {# ── Top Header ── #}
+        <div class="top-header">
+            <div class="top-header-row">
+                <div class="top-nav">
+                    <a href="/dashboard" class="top-nav-link active">Dashboard</a>
+                    <a href="/scan" class="top-nav-link">Body Scan</a>
+                    <a href="/exercise" class="top-nav-link">Exercise</a>
+                    <a href="/diet" class="top-nav-link">Diet</a>
+                </div>
+                <div class="header-badge">
+                    <div class="header-badge-title">COGNITIVE COMFORT</div>
+                    <div class="header-badge-sub">Soft Off-White</div>
+                </div>
+                <div class="header-actions">
+                    <button class="header-icon-btn">&#x1F50D;</button>
+                    <button class="header-icon-btn">&#x1F514;</button>
+                    <button class="header-icon-btn">&#x2699;</button>
+                    <div class="header-user">
+                        <div class="header-avatar">{{ session.get('user_name', 'U')[:2] | upper }}</div>
+                        <div>
+                            <div class="header-user-name">{{ session.get('user_name', 'Guest') }}</div>
+                            <span class="header-user-badge">PRO</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-row-header">
+                <button class="tab-pill active" data-tab="overview">Overview</button>
+                <button class="tab-pill" data-tab="posture">Posture</button>
+                <button class="tab-pill" data-tab="measurements">Measurements</button>
+                <button class="tab-pill" data-tab="history">History</button>
+            </div>
+        </div>
+
+        {# ── Dashboard Content ── #}
+{% if not data or not data.latest_scan %}
+<div class="card" style="text-align:center; padding:60px 30px;">
+    <h2 style="margin-bottom:12px;">No Scan Data Yet</h2>
+    <p style="color:var(--text-muted); margin-bottom:20px;">Complete a body scan to see your dashboard.</p>
+    <a href="/scan" class="btn btn-sm" style="text-decoration:none; display:inline-block;">Go to Body Scan</a>
+</div>
+{% else %}
+{% set scan = data.latest_scan %}
+{% set profile = data.profile or {} %}
+
+{# ── Body Shape Classification (used in left panel + measurements tab) ── #}
+{% set _hmr_shape = scan.hmr_data if scan.hmr_data is mapping else {} %}
+{% set _mcm = _hmr_shape.get('measurements_cm', {}) if _hmr_shape is mapping else {} %}
+{% set sh_val = _mcm.get('shoulder', 0) %}
+{% set ch_val = _mcm.get('chest', 0) %}
+{% set wa_val = _mcm.get('waist', 0) %}
+{% set hi_val = _mcm.get('hip', 0) %}
+{% set has_shape_data = (sh_val > 0 and wa_val > 0 and hi_val > 0) %}
+{% if has_shape_data %}
+  {% set shr = sh_val / hi_val %}
+  {% set stw = sh_val / wa_val %}
+  {% set whr = wa_val / hi_val %}
+  {% set ctw = (ch_val / wa_val) if ch_val > 0 else 1.0 %}
+  {% set _pose_shape = scan.pose_data if scan.pose_data is mapping else {} %}
+  {% set _sym = _pose_shape.get('symmetry_scores', {}) if _pose_shape is mapping else {} %}
+  {% set ns = namespace(asym_count=0) %}
+  {% if _sym %}
+    {% for name, info in _sym.items() %}
+      {% if info is mapping and info.get('assessment', '') == 'Asymmetric' %}
+        {% set ns.asym_count = ns.asym_count + 1 %}
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+  {% if ns.asym_count >= 3 %}
+    {% set body_shape = 'Asymmetric' %}{% set shape_color = '#94a3b8' %}
+    {% set shape_desc = 'Significant left/right imbalances detected across multiple body segments.' %}
+  {% elif whr > 1.05 and stw < 1.05 %}
+    {% set body_shape = 'Oval' %}{% set shape_color = '#f59e0b' %}
+    {% set shape_desc = 'Midsection is the widest area. Focus on core training and cardiovascular exercise.' %}
+  {% elif shr >= 1.15 and stw >= 1.30 %}
+    {% set body_shape = 'Inverted Triangle' %}{% set shape_color = '#3b82f6' %}
+    {% set shape_desc = 'Broad shoulders with a narrow waist — classic V-taper athletic build.' %}
+  {% elif shr < 0.95 %}
+    {% set body_shape = 'Triangle' %}{% set shape_color = '#10b981' %}
+    {% set shape_desc = 'Hips wider than shoulders. Lower body dominant build.' %}
+  {% elif shr >= 1.05 and ctw >= 1.10 %}
+    {% set body_shape = 'Trapezoid' %}{% set shape_color = '#06b6d4' %}
+    {% set shape_desc = 'Well-balanced athletic shape with moderate shoulder-to-hip taper.' %}
+  {% else %}
+    {% set body_shape = 'Rectangle' %}{% set shape_color = '#8b5cf6' %}
+    {% set shape_desc = 'Shoulder, waist, and hip widths are relatively uniform.' %}
+  {% endif %}
+{% else %}
+  {% set body_shape = 'Unknown' %}{% set shape_color = '#94a3b8' %}{% set shr = 0 %}{% set stw = 0 %}{% set whr = 0 %}{% set ctw = 0 %}
+  {% set shape_desc = 'Complete a full body scan to classify your body shape.' %}
+{% endif %}
+
+<!-- ═══ TAB: OVERVIEW ═══ -->
+<div class="tab-panel active" id="tab-overview">
+
+<!-- ═══ DASHBOARD GRID (3-column layout) ═══ -->
+<div class="dashboard-grid">
+
+    <!-- ════════════════════════════════════
+         LEFT COLUMN — 3D Scan Panel
+         ════════════════════════════════════ -->
+    <div>
+        <div class="scan-panel">
+            <h3>3D SCAN</h3>
+            <a href="/scan" class="scan-start-btn">SCAN START</a>
+            <p class="scan-remaining">
+                {% if scan.scanned_at %}
+                Last: {{ scan.scanned_at[:10] }}
+                {% else %}
+                XX:XX min remaining...
+                {% endif %}
+            </p>
+
+            <!-- Vertical Progress Bars -->
+            <div class="scan-progress-bars">
+                {% set endo_pct = ((scan.endomorphy or 0) / 7 * 100) | int %}
+                {% set meso_pct = ((scan.mesomorphy or 0) / 7 * 100) | int %}
+                {% set ecto_pct = ((scan.ectomorphy or 0) / 7 * 100) | int %}
+                <div class="scan-progress-bar" style="width:{{ [endo_pct, 90] | min }}%"></div>
+                <div class="scan-progress-bar" style="width:{{ [meso_pct, 80] | min }}%"></div>
+                <div class="scan-progress-bar" style="width:{{ [ecto_pct, 70] | min }}%"></div>
+                <div class="scan-progress-bar" style="width:60%"></div>
+                <div class="scan-progress-bar" style="width:50%"></div>
+            </div>
+
+            <!-- Somatotype Tendency Tracker -->
+            {% set endo = scan.endomorphy or 0 %}
+            {% set meso = scan.mesomorphy or 0 %}
+            {% set ecto = scan.ectomorphy or 0 %}
+            {% set soma_total = endo + meso + ecto %}
+            {% set endo_pct_t = ((endo / soma_total * 100) | int) if soma_total > 0 else 33 %}
+            {% set meso_pct_t = ((meso / soma_total * 100) | int) if soma_total > 0 else 33 %}
+            {% set ecto_pct_t = ((ecto / soma_total * 100) | int) if soma_total > 0 else 34 %}
+            {# Position on a linear scale: 0%=pure endo, 50%=pure meso, 100%=pure ecto #}
+            {% set tendency = (((ecto - endo) / (soma_total if soma_total > 0 else 1) * 50) + 50) | int %}
+            {% set tendency = [5, [tendency, 95] | min] | max %}
+            <div class="somatotype-tracker">
+                <div class="soma-tracker-title">Body Type Tendency</div>
+                <div class="soma-tracker-value">{{ scan.body_type or 'Unknown' }}</div>
+
+                <!-- Linear gradient bar -->
+                <div class="soma-bar-container">
+                    <div class="soma-bar">
+                        <div class="soma-bar-fill"></div>
+                        <!-- Marker for user's position -->
+                        <div class="soma-marker" style="left:{{ tendency }}%;">
+                            <div class="soma-marker-dot"></div>
+                            <div class="soma-marker-label">You</div>
+                        </div>
+                    </div>
+                    <div class="soma-bar-labels">
+                        <span class="soma-label-end">Endo</span>
+                        <span class="soma-label-mid">Meso</span>
+                        <span class="soma-label-end">Ecto</span>
+                    </div>
+                </div>
+
+                <!-- Component breakdown -->
+                <div class="soma-breakdown">
+                    <div class="soma-comp">
+                        <div class="soma-comp-bar">
+                            <div class="soma-comp-fill endo" style="width:{{ (endo / 7 * 100) | int }}%"></div>
+                        </div>
+                        <div class="soma-comp-info">
+                            <span class="soma-comp-name">Endo</span>
+                            <span class="soma-comp-val">{{ "%.1f"|format(endo) }}</span>
+                        </div>
+                    </div>
+                    <div class="soma-comp">
+                        <div class="soma-comp-bar">
+                            <div class="soma-comp-fill meso" style="width:{{ (meso / 7 * 100) | int }}%"></div>
+                        </div>
+                        <div class="soma-comp-info">
+                            <span class="soma-comp-name">Meso</span>
+                            <span class="soma-comp-val">{{ "%.1f"|format(meso) }}</span>
+                        </div>
+                    </div>
+                    <div class="soma-comp">
+                        <div class="soma-comp-bar">
+                            <div class="soma-comp-fill ecto" style="width:{{ (ecto / 7 * 100) | int }}%"></div>
+                        </div>
+                        <div class="soma-comp-info">
+                            <span class="soma-comp-name">Ecto</span>
+                            <span class="soma-comp-val">{{ "%.1f"|format(ecto) }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Steps -->
+            <div class="steps-section">
+                <div class="steps-circle">
+                    <svg width="80" height="80">
+                        <defs>
+                            <linearGradient id="stepsGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#22d3ee" />
+                                <stop offset="100%" stop-color="#3b82f6" />
+                            </linearGradient>
+                        </defs>
+                        <circle cx="40" cy="40" r="34" fill="none" stroke="#e5e7eb" stroke-width="5" />
+                        <circle cx="40" cy="40" r="34" fill="none" stroke="url(#stepsGrad)" stroke-width="5"
+                            stroke-linecap="round" stroke-dasharray="180 214" />
+                    </svg>
+                    <div class="icon-center">&#x1F463;</div>
+                </div>
+                <div class="steps-label"><span class="dot"></span> Daily Steps</div>
+                <div class="steps-count" id="stepsDisplay">-- / 10,000</div>
+            </div>
+
+            <!-- Body Shape Mini Card -->
+            {% if has_shape_data %}
+            <div class="body-shape-mini">
+                <div class="shape-mini-top">
+                    <svg viewBox="0 0 120 200" class="shape-mini-svg">
+                        {% if body_shape == 'Inverted Triangle' %}
+                        <polygon points="15,40 105,40 80,180 40,180" fill="{{ shape_color }}" opacity="0.15" stroke="{{ shape_color }}" stroke-width="2"/>
+                        {% elif body_shape == 'Triangle' %}
+                        <polygon points="40,40 80,40 105,180 15,180" fill="{{ shape_color }}" opacity="0.15" stroke="{{ shape_color }}" stroke-width="2"/>
+                        {% elif body_shape == 'Rectangle' %}
+                        <rect x="30" y="40" width="60" height="140" rx="4" fill="{{ shape_color }}" opacity="0.15" stroke="{{ shape_color }}" stroke-width="2"/>
+                        {% elif body_shape == 'Oval' %}
+                        <ellipse cx="60" cy="110" rx="45" ry="70" fill="{{ shape_color }}" opacity="0.15" stroke="{{ shape_color }}" stroke-width="2"/>
+                        {% elif body_shape == 'Trapezoid' %}
+                        <polygon points="25,40 95,40 105,180 15,180" fill="{{ shape_color }}" opacity="0.15" stroke="{{ shape_color }}" stroke-width="2"/>
+                        {% else %}
+                        <polygon points="30,40 90,40 95,110 85,180 35,180 25,110" fill="{{ shape_color }}" opacity="0.15" stroke="{{ shape_color }}" stroke-width="2"/>
+                        {% endif %}
+                    </svg>
+                    <div class="shape-mini-info">
+                        <span class="shape-mini-name" style="color:{{ shape_color }};">{{ body_shape }}</span>
+                        <span class="shape-mini-label">Body Shape</span>
+                    </div>
+                </div>
+                <div class="shape-mini-ratios">
+                    <div><span>S/H</span><strong>{{ "%.2f"|format(shr) }}</strong></div>
+                    <div><span>W/H</span><strong>{{ "%.2f"|format(whr) }}</strong></div>
+                    <div><span>S/W</span><strong>{{ "%.2f"|format(stw) }}</strong></div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         CENTER COLUMN — Stats + Body Scan + Composition
+         ════════════════════════════════════ -->
+    <div>
+        <!-- Stats Row -->
+        <div class="stats-row">
+            <!-- Weight -->
+            <div class="stat-card">
+                <p class="label">Weight</p>
+                <div>
+                    <span class="value">{{ "%.1f"|format(profile.weight_kg or 0) }}</span>
+                    <span class="unit">kg</span>
+                </div>
+                <div class="stat-trend up">
+                    <span>&#x2191;</span>
+                    {% if profile.target_weight %}
+                    <span>Target: {{ profile.target_weight }} kg</span>
+                    {% else %}
+                    <span>+0.0 kg</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Body Fat -->
+            <div class="stat-card">
+                <p class="label">Body Fat</p>
+                <div>
+                    <span class="value">{{ "%.1f"|format(scan.endomorphy or 0) }}</span>
+                    <span class="unit">%</span>
+                </div>
+                <div class="stat-trend down">
+                    <span>&#x2193;</span>
+                    <span>-{{ "%.1f"|format(scan.endomorphy or 0) }}%</span>
+                </div>
+            </div>
+
+            <!-- BMI -->
+            <div class="stat-card">
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                    <span style="color:var(--cyan);">&#x1F4C8;</span>
+                    <span class="label" style="margin-bottom:0;">BMI</span>
+                </div>
+                <div>
+                    <span class="value">{{ "%.1f"|format(scan.bmi or 0) }}</span>
+                </div>
+                {% set bmi_val = scan.bmi or 0 %}
+                {% if bmi_val < 18.5 %}
+                <span class="stat-badge" style="background:#fef3c7; color:#b45309;">Underweight</span>
+                {% elif bmi_val < 25 %}
+                <span class="stat-badge">Normal</span>
+                {% elif bmi_val < 30 %}
+                <span class="stat-badge" style="background:#fef3c7; color:#b45309;">Overweight</span>
+                {% else %}
+                <span class="stat-badge" style="background:#fee2e2; color:#dc2626;">Obese</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Body Scan Visual — Interactive Avatar with SVG Muscle Overlay -->
+        <div class="body-scan-card">
+            <!-- Concentric Rings Background -->
+            <div class="body-scan-rings">
+                <div class="ring" style="width:440px; height:440px;"></div>
+                <div class="ring" style="width:380px; height:380px;"></div>
+                <div class="ring" style="width:320px; height:320px;"></div>
+                <div class="ring" style="width:260px; height:260px;"></div>
+                <div class="ring" style="width:200px; height:200px;"></div>
+                <div class="ring" style="width:140px; height:140px;"></div>
+            </div>
+
+            <!-- Scan Lines -->
+            <div class="scan-lines">
+                <div class="line" style="top:18%;"></div>
+                <div class="line" style="top:36%;"></div>
+                <div class="line" style="top:54%;"></div>
+                <div class="line" style="top:72%;"></div>
+                <div class="line" style="top:90%;"></div>
+            </div>
+
+            <!-- Avatar + SVG Muscle Overlay Container -->
+            <div class="body-avatar-container" id="avatarContainer">
+
+                <!-- Real Image (user places at /static/img/avatar-body.png) -->
+                <img src="/static/img/avatar-body.png" alt="Body Scan Avatar"
+                     class="body-avatar-img" id="avatarImg"
+                     onerror="this.style.display='none'; document.getElementById('avatarFallback').style.display='flex';" />
+
+                <!-- SVG Fallback Body (shown if no image) -->
+                <svg id="avatarFallback" class="body-avatar-svg" viewBox="0 0 300 600" style="display:none;">
+                    <defs>
+                        <linearGradient id="skin" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stop-color="#f0c4b0"/><stop offset="100%" stop-color="#d4a08a"/>
+                        </linearGradient>
+                        <linearGradient id="skinD" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stop-color="#c89478"/><stop offset="100%" stop-color="#dab49e"/>
+                        </linearGradient>
+                        <linearGradient id="shorts" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#334155"/>
+                        </linearGradient>
+                        <linearGradient id="hair" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stop-color="#5a3825"/><stop offset="100%" stop-color="#3d2517"/>
+                        </linearGradient>
+                    </defs>
+                    <!-- HEAD -->
+                    <ellipse cx="150" cy="48" rx="32" ry="38" fill="url(#skin)"/>
+                    <path d="M118 36 Q125 8 150 4 Q175 8 182 36 Q175 22 150 20 Q125 22 118 36Z" fill="url(#hair)"/>
+                    <!-- NECK / TRAPS -->
+                    <path d="M136 82 L136 100 Q143 105 150 105 Q157 105 164 100 L164 82" fill="url(#skin)"/>
+                    <path d="M136 90 Q112 98 82 112 L90 120 Q116 108 136 104Z" fill="url(#skin)"/>
+                    <path d="M164 90 Q188 98 218 112 L210 120 Q184 108 164 104Z" fill="url(#skin)"/>
+                    <!-- SHOULDERS (Deltoids) -->
+                    <ellipse cx="78" cy="122" rx="24" ry="18" fill="url(#skin)"/>
+                    <ellipse cx="222" cy="122" rx="24" ry="18" fill="url(#skin)"/>
+                    <!-- CHEST (Pecs) -->
+                    <path d="M92 110 Q120 106 150 116 Q180 106 208 110 L210 155 Q182 168 150 172 Q118 168 90 155Z" fill="url(#skin)"/>
+                    <path d="M105 122 Q127 132 144 136" fill="none" stroke="#c49480" stroke-width="1.5" opacity="0.5"/>
+                    <path d="M195 122 Q173 132 156 136" fill="none" stroke="#c49480" stroke-width="1.5" opacity="0.5"/>
+                    <!-- ABS / CORE -->
+                    <path d="M104 155 L196 155 L192 260 Q172 272 150 275 Q128 272 108 260Z" fill="url(#skin)"/>
+                    <line x1="150" y1="162" x2="150" y2="258" stroke="#c49480" stroke-width="1" opacity="0.3"/>
+                    <line x1="115" y1="178" x2="185" y2="178" stroke="#c49480" stroke-width="0.8" opacity="0.2"/>
+                    <line x1="116" y1="200" x2="184" y2="200" stroke="#c49480" stroke-width="0.8" opacity="0.2"/>
+                    <line x1="118" y1="222" x2="182" y2="222" stroke="#c49480" stroke-width="0.8" opacity="0.2"/>
+                    <line x1="120" y1="244" x2="180" y2="244" stroke="#c49480" stroke-width="0.8" opacity="0.2"/>
+                    <!-- BICEPS -->
+                    <path d="M56 130 Q50 155 46 190 Q52 198 60 195 Q66 162 72 138Z" fill="url(#skin)"/>
+                    <path d="M244 130 Q250 155 254 190 Q248 198 240 195 Q234 162 228 138Z" fill="url(#skin)"/>
+                    <!-- FOREARMS -->
+                    <path d="M46 192 Q40 225 34 265 Q40 272 48 268 Q54 232 60 198Z" fill="url(#skin)"/>
+                    <path d="M254 192 Q260 225 266 265 Q260 272 252 268 Q246 232 240 198Z" fill="url(#skin)"/>
+                    <!-- HANDS -->
+                    <ellipse cx="38" cy="276" rx="11" ry="14" fill="url(#skin)"/>
+                    <ellipse cx="262" cy="276" rx="11" ry="14" fill="url(#skin)"/>
+                    <!-- SHORTS -->
+                    <path d="M108 256 L192 256 L196 275 Q192 330 178 358 L158 358 Q154 325 150 312
+                             Q146 325 142 358 L122 358 Q108 330 104 275Z" fill="url(#shorts)"/>
+                    <!-- QUADS (Thighs) -->
+                    <path d="M122 352 Q116 390 112 440 Q120 448 132 445 Q136 400 140 360Z" fill="url(#skin)"/>
+                    <path d="M178 352 Q184 390 188 440 Q180 448 168 445 Q164 400 160 360Z" fill="url(#skin)"/>
+                    <!-- KNEES -->
+                    <ellipse cx="122" cy="450" rx="14" ry="11" fill="url(#skin)"/>
+                    <ellipse cx="178" cy="450" rx="14" ry="11" fill="url(#skin)"/>
+                    <!-- CALVES -->
+                    <path d="M110 458 Q106 490 110 535 Q118 544 128 540 Q132 498 134 464Z" fill="url(#skin)"/>
+                    <path d="M190 458 Q194 490 190 535 Q182 544 172 540 Q168 498 166 464Z" fill="url(#skin)"/>
+                    <!-- SHOES -->
+                    <path d="M106 534 Q102 548 96 556 Q108 562 132 558 Q134 548 132 538Z" fill="#475569"/>
+                    <path d="M194 534 Q198 548 204 556 Q192 562 168 558 Q166 548 168 538Z" fill="#475569"/>
+                </svg>
+
+                <!-- ═══ SVG CLICKABLE MUSCLE OVERLAY ═══ -->
+                <!-- This SVG sits on top of the image/fallback with identical viewBox -->
+                <svg class="body-overlay-svg" viewBox="0 0 300 600" id="muscleOverlay">
+                    <defs>
+                        <filter id="glow">
+                            <feGaussianBlur stdDeviation="4" result="blur"/>
+                            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                        </filter>
+                    </defs>
+
+                    <!-- HEAD -->
+                    <ellipse class="muscle-zone" data-muscle="head" data-label="Head"
+                        cx="150" cy="48" rx="32" ry="38"/>
+
+                    <!-- LEFT SHOULDER -->
+                    <ellipse class="muscle-zone" data-muscle="shoulders" data-label="Left Deltoid"
+                        cx="78" cy="122" rx="24" ry="18"/>
+
+                    <!-- RIGHT SHOULDER -->
+                    <ellipse class="muscle-zone" data-muscle="shoulders" data-label="Right Deltoid"
+                        cx="222" cy="122" rx="24" ry="18"/>
+
+                    <!-- CHEST (Pectorals) -->
+                    <path class="muscle-zone" data-muscle="chest" data-label="Chest / Pectorals"
+                        d="M92 110 Q120 106 150 116 Q180 106 208 110 L210 155 Q182 168 150 172 Q118 168 90 155Z"/>
+
+                    <!-- ABS / CORE -->
+                    <path class="muscle-zone" data-muscle="core" data-label="Core / Abs"
+                        d="M104 155 L196 155 L192 260 Q172 272 150 275 Q128 272 108 260Z"/>
+
+                    <!-- LEFT BICEP -->
+                    <path class="muscle-zone" data-muscle="arms" data-label="Left Bicep"
+                        d="M56 128 Q50 155 46 190 Q52 198 60 195 Q66 162 72 136Z"/>
+
+                    <!-- RIGHT BICEP -->
+                    <path class="muscle-zone" data-muscle="arms" data-label="Right Bicep"
+                        d="M244 128 Q250 155 254 190 Q248 198 240 195 Q234 162 228 136Z"/>
+
+                    <!-- LEFT FOREARM -->
+                    <path class="muscle-zone" data-muscle="arms" data-label="Left Forearm"
+                        d="M46 192 Q40 225 34 265 Q40 272 48 268 Q54 232 60 198Z"/>
+
+                    <!-- RIGHT FOREARM -->
+                    <path class="muscle-zone" data-muscle="arms" data-label="Right Forearm"
+                        d="M254 192 Q260 225 266 265 Q260 272 252 268 Q246 232 240 198Z"/>
+
+                    <!-- LEFT QUAD -->
+                    <path class="muscle-zone" data-muscle="legs" data-label="Left Quadricep"
+                        d="M120 352 Q114 390 110 445 Q120 452 134 448 Q138 398 142 358Z"/>
+
+                    <!-- RIGHT QUAD -->
+                    <path class="muscle-zone" data-muscle="legs" data-label="Right Quadricep"
+                        d="M180 352 Q186 390 190 445 Q180 452 166 448 Q162 398 158 358Z"/>
+
+                    <!-- LEFT CALF -->
+                    <path class="muscle-zone" data-muscle="calves" data-label="Left Calf"
+                        d="M108 456 Q104 490 108 538 Q118 548 130 542 Q134 496 136 462Z"/>
+
+                    <!-- RIGHT CALF -->
+                    <path class="muscle-zone" data-muscle="calves" data-label="Right Calf"
+                        d="M192 456 Q196 490 192 538 Q182 548 170 542 Q166 496 164 462Z"/>
+                </svg>
+
+                <!-- ═══ TOOLTIP ═══ -->
+                <div id="bodyTooltip" class="body-tooltip"></div>
+
+                <!-- Score badges with connector lines -->
+                <div class="scan-connector" style="top:20%; right:2%;">
+                    <div class="connector-line"></div>
+                    <div class="connector-badge cyan" id="badgeChest">--</div>
+                </div>
+                <div class="scan-connector" style="top:40%; right:0%;">
+                    <div class="connector-line"></div>
+                    <div class="connector-badge blue" id="badgeCore">--</div>
+                </div>
+                <div class="scan-connector" style="bottom:26%; right:2%;">
+                    <div class="connector-line"></div>
+                    <div class="connector-badge green" id="badgeLegs">--</div>
+                </div>
+            </div>
+
+            <p style="text-align:center; color:var(--text-dim); font-size:0.72rem; margin-top:12px;">
+                Click on any muscle group to view detailed scan data
+            </p>
+        </div>
+
+        <!-- Bottom Grid: Composition + Progression -->
+        <div class="bottom-grid">
+            <!-- Body Composition -->
+            <div class="composition-card">
+                <h4>Body Composition</h4>
+                <div class="composition-item">
+                    <span class="name">Muscle Mass</span>
+                    <div>
+                        <span class="val">{{ "%.1f"|format(scan.mesomorphy or 0) }}</span>
+                        <span class="unit">score</span>
+                    </div>
+                </div>
+                <div class="composition-item">
+                    <span class="name">Body Fat</span>
+                    <div>
+                        <span class="val">{{ "%.1f"|format(scan.endomorphy or 0) }}</span>
+                        <span class="unit">score</span>
+                    </div>
+                </div>
+                <div class="composition-item">
+                    <span class="name">Ectomorphy</span>
+                    <div>
+                        <span class="val">{{ "%.1f"|format(scan.ectomorphy or 0) }}</span>
+                        <span class="unit">score</span>
+                    </div>
+                </div>
+                {% if scan.bmi %}
+                <div class="composition-item">
+                    <span class="name">BMI</span>
+                    <div>
+                        <span class="val">{{ "%.1f"|format(scan.bmi) }}</span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Body Progression -->
+            <div class="progression-card">
+                <h4>Body Progression</h4>
+                {% set meso_pct = ((scan.mesomorphy or 0) / 7 * 100) | int %}
+                {% set endo_pct = ((scan.endomorphy or 0) / 7 * 100) | int %}
+                {% set ecto_pct = ((scan.ectomorphy or 0) / 7 * 100) | int %}
+                <div class="progression-item">
+                    <div class="label-row">
+                        <span class="name">Muscle Mass</span>
+                    </div>
+                    <div class="progression-bar">
+                        <div class="fill cyan" style="width:{{ [meso_pct, 95] | min }}%"></div>
+                    </div>
+                </div>
+                <div class="progression-item">
+                    <div class="label-row">
+                        <span class="name">Strength</span>
+                    </div>
+                    <div class="progression-bar">
+                        <div class="fill green" style="width:{{ [((meso_pct + endo_pct) / 2) | int, 95] | min }}%"></div>
+                    </div>
+                </div>
+                <div class="progression-item">
+                    <div class="label-row">
+                        <span class="name">Endurance</span>
+                    </div>
+                    <div class="progression-bar">
+                        <div class="fill amber" style="width:{{ [ecto_pct, 95] | min }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="results-grid" style="margin-top:16px;">
+            <div class="card">
+                <h2>Somatotype Components</h2>
+                <div id="chartComponents" class="chart-container"></div>
+            </div>
+            <div class="card">
+                <h2>Body Symmetry</h2>
+                <div id="chartSymmetry" class="chart-container"></div>
+            </div>
+        </div>
+
+        <!-- Body Proportions Chart -->
+        <div class="card" style="margin-top:16px;">
+            <h2>Body Proportions</h2>
+            <div id="chartProportions" class="chart-container"></div>
+        </div>
+
+        <!-- Target Muscles -->
+        {% if data.target_muscles %}
+        <div class="card">
+            <h2>Target Muscle Focus</h2>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:12px;">
+                {% for muscle in data.target_muscles %}
+                <div class="muscle-focus-tag">{{ muscle | capitalize }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Quick Actions -->
+        <div class="results-grid" style="margin-top:16px;">
+            <a href="/exercise" class="card" style="text-decoration:none; text-align:center; cursor:pointer;">
+                <h2>Exercise Plan</h2>
+                <p style="color:var(--text-muted);">Get a personalized workout plan based on your body type</p>
+            </a>
+            <a href="/diet" class="card" style="text-decoration:none; text-align:center; cursor:pointer;">
+                <h2>Diet Plan</h2>
+                <p style="color:var(--text-muted);">Get a personalized nutrition plan with macro targets</p>
+            </a>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         RIGHT COLUMN — AI Progress + Advice
+         ════════════════════════════════════ -->
+    <div>
+        <!-- AI Progress Card -->
+        <div class="ai-progress-card">
+            <div class="ai-progress-header">
+                <h3>AI Progress</h3>
+                <div class="ai-score">
+                    <div class="ai-score-icon">&#x1F9E0;</div>
+                    <span class="number">{{ ((scan.mesomorphy or 0) * 13.3) | int }}</span>
+                    <span class="label">Muscle Mass</span>
+                </div>
+            </div>
+
+            <!-- 3D Body Scan Point Cloud -->
+            <div class="ai-body-preview" id="plyScanPreview" style="position:relative; cursor:grab;">
+                <canvas id="plyScanCanvas" style="width:100%; height:100%; display:block;"></canvas>
+                <div id="plyScanLoading" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:0.85rem;">
+                    <div style="text-align:center;">
+                        <div class="fbx-loading-spinner"></div>
+                        <p style="margin-top:8px;">Loading 3D Scan...</p>
+                    </div>
+                </div>
+                <button id="plyScanExpand" title="Expand 3D View" style="position:absolute; top:8px; right:8px; background:rgba(255,255,255,0.85); border:1px solid rgba(0,0,0,0.1); border-radius:8px; width:32px; height:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1rem; z-index:2; backdrop-filter:blur(4px);">&#x26F6;</button>
+            </div>
+
+            <!-- Fullscreen modal for expanded view -->
+            <div id="plyScanModal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.8); backdrop-filter:blur(6px);">
+                <canvas id="plyScanCanvasFull" style="width:100%; height:100%;"></canvas>
+                <button id="plyScanClose" style="position:absolute; top:16px; right:16px; background:rgba(255,255,255,0.9); border:none; border-radius:50%; width:40px; height:40px; cursor:pointer; font-size:1.2rem; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.2);">✕</button>
+                <div style="position:absolute; bottom:16px; left:50%; transform:translateX(-50%); color:rgba(255,255,255,0.6); font-size:0.8rem;">Drag to rotate · Scroll to zoom</div>
+            </div>
+
+            <!-- Calories Burned Speedometer -->
+            {% set cal_burned = today_stats.calories_burned if today_stats else 0 %}
+            {% set cal_goal = 500 %}
+            {% set cal_pct = ([cal_burned / cal_goal * 100, 100] | min) | int if cal_goal > 0 else 0 %}
+            {# SVG arc: 240° total sweep, from 150° to 390° (or -210° to 30°) #}
+            {% set arc_deg = (cal_pct / 100 * 240) %}
+            {% set ex_done = today_stats.total_completed if today_stats else 0 %}
+            {% set ex_total = today_stats.total_plan_today if today_stats else 0 %}
+            <div class="calories-speedometer" id="calorieGauge">
+                <div class="speedo-title">Calories Burned Today</div>
+                <div class="speedo-svg-wrap">
+                    <svg viewBox="0 0 200 140" class="speedo-svg">
+                        <defs>
+                            <linearGradient id="speedoGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#22d3ee"/>
+                                <stop offset="50%" stop-color="#10b981"/>
+                                <stop offset="100%" stop-color="#ef4444"/>
+                            </linearGradient>
+                        </defs>
+                        <!-- Background arc -->
+                        <path d="M 24 120 A 76 76 0 1 1 176 120" fill="none" stroke="#e5e7eb" stroke-width="12" stroke-linecap="round"/>
+                        <!-- Filled arc (dynamic) -->
+                        <path id="speedoArc" d="M 24 120 A 76 76 0 1 1 176 120" fill="none" stroke="url(#speedoGrad)" stroke-width="12" stroke-linecap="round"
+                              stroke-dasharray="0 999" class="speedo-arc"/>
+                        <!-- Tick marks -->
+                        <line x1="24" y1="120" x2="30" y2="120" stroke="#cbd5e1" stroke-width="1.5"/>
+                        <line x1="36" y1="55" x2="41" y2="59" stroke="#cbd5e1" stroke-width="1.5"/>
+                        <line x1="100" y1="38" x2="100" y2="44" stroke="#cbd5e1" stroke-width="1.5"/>
+                        <line x1="164" y1="55" x2="159" y2="59" stroke="#cbd5e1" stroke-width="1.5"/>
+                        <line x1="176" y1="120" x2="170" y2="120" stroke="#cbd5e1" stroke-width="1.5"/>
+                        <!-- Needle -->
+                        <g id="speedoNeedle" style="transform-origin: 100px 120px;">
+                            <line x1="100" y1="120" x2="100" y2="54" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+                            <circle cx="100" cy="120" r="5" fill="#1e293b"/>
+                            <circle cx="100" cy="120" r="2.5" fill="#fff"/>
+                        </g>
+                    </svg>
+                    <!-- Center value -->
+                    <div class="speedo-value">
+                        <span class="speedo-number" id="speedoNumber">{{ cal_burned }}</span>
+                        <span class="speedo-unit">kcal</span>
+                    </div>
+                </div>
+                <!-- Bottom labels -->
+                <div class="speedo-labels">
+                    <span>0</span>
+                    <span class="speedo-goal">Goal: {{ cal_goal }}</span>
+                    <span>{{ cal_goal }}+</span>
+                </div>
+                <!-- Exercise count -->
+                <div class="speedo-exercises">
+                    <span class="speedo-ex-count">{{ ex_done }}/{{ ex_total }}</span> exercises completed
+                </div>
+            </div>
+
+            <!-- Second Stats Card -->
+            <div class="ai-stat-card amber">
+                <div class="ai-stat-header">
+                    <div class="left">
+                        <span class="icon">&#x26A1;</span>
+                        <span class="name">{{ scan.body_type or 'Body Type' }}</span>
+                    </div>
+                    <span class="value">{{ scan.somatotype_rating or '—' }}</span>
+                </div>
+                <div class="ai-stat-sub">{{ scan.classification or 'Classification' }}</div>
+                <div class="ai-stat-progress">
+                    <div class="info">{{ "%.1f"|format(scan.endomorphy or 0) }} / {{ "%.1f"|format(scan.mesomorphy or 0) }} / {{ "%.1f"|format(scan.ectomorphy or 0) }}</div>
+                    <div class="track">
+                        <div class="fill amber" style="width:{{ (((scan.mesomorphy or 0) / 7 * 100) | int) }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Personalized Advice -->
+        <div class="advice-card">
+            <div class="advice-header">
+                <span class="icon" style="color:#f59e0b;">&#x1F4A1;</span>
+                <h3>Personalized Advice</h3>
+            </div>
+
+            <!-- Fitness Age -->
+            <div class="fitness-age-box">
+                <div>
+                    <p class="label">Estimated Fitness Age</p>
+                    <div>
+                        <span class="value">{{ profile.age or '—' }}</span>
+                        <span class="unit">yrs</span>
+                    </div>
+                </div>
+                <div class="fitness-age-icon">&#x1F3AF;</div>
+            </div>
+
+            <!-- Advice Items -->
+            <div class="advice-list">
+                {% if scan.body_type == 'Endomorph' or (scan.endomorphy or 0) > (scan.mesomorphy or 0) %}
+                <div class="advice-item">
+                    <span class="check">&#x2705;</span>
+                    <p>Focus on cardio and HIIT to reduce body fat percentage while maintaining muscle</p>
+                </div>
+                <div class="advice-item">
+                    <span class="check">&#x2705;</span>
+                    <p>Monitor calorie intake closely — endomorphs benefit from a controlled diet</p>
+                </div>
+                {% elif scan.body_type == 'Ectomorph' or (scan.ectomorphy or 0) > (scan.mesomorphy or 0) %}
+                <div class="advice-item">
+                    <span class="check">&#x2705;</span>
+                    <p>Focus on heavy compound lifts to build muscle mass efficiently</p>
+                </div>
+                <div class="advice-item">
+                    <span class="check">&#x2705;</span>
+                    <p>Increase caloric surplus with protein-rich meals to support muscle growth</p>
+                </div>
+                {% else %}
+                <div class="advice-item">
+                    <span class="check">&#x2705;</span>
+                    <p>Try focusing on your chest muscles to improve upper body strength</p>
+                </div>
+                <div class="advice-item">
+                    <span class="check">&#x2705;</span>
+                    <p>Establish consistency by following a 4-week strength training program</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Action Plan -->
+            <a href="/exercise" class="action-plan-btn">Action Plan</a>
+        </div>
+    </div>
+</div>
+</div>{# end tab-overview #}
+
+<!-- ═══ TAB: POSTURE ═══ -->
+<div class="tab-panel" id="tab-posture" style="display:none;">
+    <div class="card" style="padding:30px;">
+        <h2>Pose Analysis</h2>
+        {% if scan.annotated_image %}
+        <img src="{{ scan.annotated_image }}" alt="Pose skeleton" style="max-width:100%; border-radius:12px; margin-top:16px;">
+        {% else %}
+        <p style="color:var(--text-muted); padding:40px 0;">No pose image available. Complete a body scan to see your posture analysis.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ═══ TAB: MEASUREMENTS ═══ -->
+<div class="tab-panel" id="tab-measurements" style="display:none;">
+{% set pose = scan.pose_data if scan.pose_data is mapping else {} %}
+{% set hmr = scan.hmr_data if scan.hmr_data is mapping else {} %}
+{% set m_cm = hmr.get('measurements_cm', {}) if hmr is mapping else {} %}
+{% set j_cm = pose.get('joint_lengths_cm', {}) if pose is mapping else {} %}
+{% set ratios = hmr.get('ratios', {}) if hmr is mapping else {} %}
+{% set symmetry = pose.get('symmetry_scores', {}) if pose is mapping else {} %}
+{% set proportions = pose.get('body_proportions', {}) if pose is mapping else {} %}
+
+<div class="card measurements-section">
+    <div class="measurements-header">
+        <h2>Body Measurements</h2>
+        <p class="measurements-subtitle">All measurements from your latest scan</p>
+    </div>
+
+    <!-- HMR Body Circumferences -->
+    {% if m_cm %}
+    <div class="measurement-group">
+        <h4 class="measurement-group-title">Body Circumferences <span class="measurement-source">HMR Estimation</span></h4>
+        <div class="measurements-grid">
+            {% if m_cm.get('chest') %}
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Chest</span>
+                    <span class="measurement-value">{{ "%.1f"|format(m_cm.chest) }} <small>cm</small></span>
+                </div>
+            </div>
+            {% endif %}
+            {% if m_cm.get('waist') %}
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Waist</span>
+                    <span class="measurement-value">{{ "%.1f"|format(m_cm.waist) }} <small>cm</small></span>
+                </div>
+            </div>
+            {% endif %}
+            {% if m_cm.get('hip') %}
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Hip</span>
+                    <span class="measurement-value">{{ "%.1f"|format(m_cm.hip) }} <small>cm</small></span>
+                </div>
+            </div>
+            {% endif %}
+            {% if m_cm.get('shoulder') %}
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Shoulder Width</span>
+                    <span class="measurement-value">{{ "%.1f"|format(m_cm.shoulder) }} <small>cm</small></span>
+                </div>
+            </div>
+            {% endif %}
+            {% if m_cm.get('upper_arm') %}
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Upper Arm</span>
+                    <span class="measurement-value">{{ "%.1f"|format(m_cm.upper_arm) }} <small>cm</small></span>
+                </div>
+            </div>
+            {% endif %}
+            {% if m_cm.get('thigh') %}
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Thigh</span>
+                    <span class="measurement-value">{{ "%.1f"|format(m_cm.thigh) }} <small>cm</small></span>
+                </div>
+            </div>
+            {% endif %}
+            {% if m_cm.get('belly') %}
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Belly</span>
+                    <span class="measurement-value">{{ "%.1f"|format(m_cm.belly) }} <small>cm</small></span>
+                </div>
+            </div>
+            {% endif %}
+            {% if m_cm.get('inseam') %}
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Inseam</span>
+                    <span class="measurement-value">{{ "%.1f"|format(m_cm.inseam) }} <small>cm</small></span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Pose Joint Lengths -->
+    {% if j_cm %}
+    <div class="measurement-group">
+        <h4 class="measurement-group-title">Limb Lengths <span class="measurement-source">MediaPipe Pose</span></h4>
+        <div class="measurements-grid">
+            {% for key, label in [('left_upper_arm','L Upper Arm'),('right_upper_arm','R Upper Arm'),('left_forearm','L Forearm'),('right_forearm','R Forearm'),('shoulder_width','Shoulder Width'),('hip_width','Hip Width'),('left_torso','L Torso'),('right_torso','R Torso'),('left_thigh','L Thigh'),('right_thigh','R Thigh'),('left_shin','L Shin'),('right_shin','R Shin')] %}
+            {% if j_cm.get(key) %}
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">{{ label }}</span>
+                    <span class="measurement-value">{{ "%.1f"|format(j_cm[key]) }} <small>cm</small></span>
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Body Ratios -->
+    {% if ratios %}
+    <div class="measurement-group">
+        <h4 class="measurement-group-title">Body Ratios</h4>
+        <div class="measurements-grid">
+            {% for key, label in [('WHtR','Waist-to-Height'),('WHR','Waist-to-Hip'),('SHR','Shoulder-to-Height'),('HWR','Height-Weight'),('LL_H','Leg-to-Height'),('TVR','Torso Volume'),('UAG_H','Upper Arm-to-Height'),('TG_H','Thigh-to-Height')] %}
+            {% if ratios.get(key) %}
+            <div class="measurement-item ratio">
+                <div class="measurement-info">
+                    <span class="measurement-label">{{ label }}</span>
+                    <span class="measurement-value">{{ "%.3f"|format(ratios[key]) }}</span>
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Symmetry Scores -->
+    {% if symmetry %}
+    <div class="measurement-group">
+        <h4 class="measurement-group-title">Symmetry Analysis</h4>
+        <div class="symmetry-grid">
+            {% for name, info in symmetry.items() %}
+            <div class="symmetry-item">
+                <div class="symmetry-name">{{ name }}</div>
+                {% if info is mapping %}
+                <div class="symmetry-bar-wrap">
+                    {% set ratio_val = info.get('ratio', 1.0) %}
+                    {% set pct = (ratio_val * 100) | int %}
+                    <div class="symmetry-bar">
+                        <div class="symmetry-fill {% if pct >= 95 %}green{% elif pct >= 85 %}amber{% else %}red{% endif %}" style="width:{{ [pct, 100] | min }}%"></div>
+                    </div>
+                    <span class="symmetry-pct">{{ pct }}%</span>
+                </div>
+                <div class="symmetry-assessment">{{ info.get('assessment', '') }}</div>
+                {% else %}
+                <div class="symmetry-bar-wrap">
+                    <div class="symmetry-bar">
+                        <div class="symmetry-fill green" style="width:100%"></div>
+                    </div>
+                    <span class="symmetry-pct">{{ info }}</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Body Proportions -->
+    {% if proportions %}
+    <div class="measurement-group">
+        <h4 class="measurement-group-title">Body Proportions</h4>
+        <div class="measurements-grid">
+            {% for name, val in proportions.items() %}
+            <div class="measurement-item ratio">
+                <div class="measurement-info">
+                    <span class="measurement-label">{{ name }}</span>
+                    <span class="measurement-value">{{ "%.2f"|format(val) if val is number else val }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Somatotype Chart in Measurements Tab -->
+    <div class="measurement-group">
+        <h4 class="measurement-group-title">Somatotype Breakdown</h4>
+        <div class="measurements-grid">
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Endomorphy</span>
+                    <span class="measurement-value">{{ "%.1f"|format(scan.endomorphy or 0) }}</span>
+                </div>
+            </div>
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Mesomorphy</span>
+                    <span class="measurement-value">{{ "%.1f"|format(scan.mesomorphy or 0) }}</span>
+                </div>
+            </div>
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Ectomorphy</span>
+                    <span class="measurement-value">{{ "%.1f"|format(scan.ectomorphy or 0) }}</span>
+                </div>
+            </div>
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">BMI</span>
+                    <span class="measurement-value">{{ "%.1f"|format(scan.bmi or 0) }}</span>
+                </div>
+            </div>
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Body Type</span>
+                    <span class="measurement-value">{{ scan.body_type or '—' }}</span>
+                </div>
+            </div>
+            <div class="measurement-item">
+                <div class="measurement-info">
+                    <span class="measurement-label">Classification</span>
+                    <span class="measurement-value">{{ scan.classification or '—' }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>{# end tab-measurements #}
+
+<!-- ═══ TAB: HISTORY ═══ -->
+<div class="tab-panel" id="tab-history" style="display:none;">
+    <div class="card" style="padding:30px;">
+        <h2>Scan History</h2>
+        <p style="color:var(--text-muted); margin-top:12px;">
+            {% if scan.scanned_at %}
+            Latest scan: {{ scan.scanned_at[:10] }}
+            {% else %}
+            No scan history available yet.
+            {% endif %}
+        </p>
+        <p style="color:var(--text-dim); font-size:0.82rem; margin-top:8px;">History tracking with multiple scans coming soon.</p>
+    </div>
+</div>
+
+{% endif %}
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if data and data.latest_scan %}
+<script>
+    const SCAN_DATA = {{ data.latest_scan | tojson }};
+    const TARGET_MUSCLES = {{ data.target_muscles | tojson }};
+</script>
+<script src="/static/js/body-hotspots.js"></script>
+<script src="/static/js/dashboard.js"></script>
+
+<!-- Tab Switching -->
+<script>
+(function() {
+    const pills = document.querySelectorAll('.tab-pill[data-tab]');
+    const panels = document.querySelectorAll('.tab-panel');
+
+    pills.forEach(pill => {
+        pill.addEventListener('click', function() {
+            const tab = this.dataset.tab;
+
+            // Update active pill
+            pills.forEach(p => p.classList.remove('active'));
+            this.classList.add('active');
+
+            // Show/hide panels
+            panels.forEach(panel => {
+                if (panel.id === 'tab-' + tab) {
+                    panel.style.display = '';
+                    panel.classList.add('active');
+                } else {
+                    panel.style.display = 'none';
+                    panel.classList.remove('active');
+                }
+            });
+        });
+    });
+})();
+</script>
+{% endif %}
+
+<!-- Three.js for 3D Point Cloud -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
+<script src="/static/js/ply-viewer.js"></script>
+{% endblock %}

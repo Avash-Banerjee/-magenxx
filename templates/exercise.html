@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}FitScan — Exercise Plan{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>🏋️ Exercise Plan</h1>
+    <p class="subtitle">Personalized workout based on your body type & goals</p>
+</div>
+
+{% if not data or not data.latest_scan %}
+<div class="card" style="text-align:center; padding:60px 30px;">
+    <h2 style="margin-bottom:12px;">Scan Required</h2>
+    <p style="color:var(--text-muted); margin-bottom:20px;">Complete a body scan first to generate your exercise plan.</p>
+    <a href="/scan" class="btn btn-sm" style="text-decoration:none; display:inline-block;">📸 Go to Body Scan</a>
+</div>
+{% else %}
+
+<!-- Plan Controls -->
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div>
+            <p style="color:var(--text-muted); font-size:0.85rem;">
+                Body type: <strong style="color:var(--accent-1);">{{ data.latest_scan.body_type }}</strong> &bull;
+                Goal: <strong>{{ ', '.join(data.goals) if data.goals else 'General Fitness' }}</strong> &bull;
+                {{ (data.profile or {}).get('training_days_per_week', 4) }} days/week
+            </p>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-sm" id="btnGenerate" onclick="generatePlan()">
+                ✨ Generate Plan
+            </button>
+        </div>
+    </div>
+    <p id="planSummary" style="color:var(--text-muted); font-size:0.85rem; margin-top:12px; display:none;"></p>
+</div>
+
+<!-- Loading -->
+<div class="loading" id="exerciseLoading">
+    <div class="spinner"></div>
+    <p>Generating your personalized workout plan with AI...</p>
+    <p style="color:var(--text-dim); font-size:0.82rem;">This may take 10-20 seconds</p>
+</div>
+
+<!-- Plan Content -->
+<div id="planContent" style="display:none;">
+    <!-- Weekly Progress -->
+    <div class="card">
+        <h2>📈 Weekly Progress</h2>
+        <div style="display:flex; align-items:center; gap:24px; flex-wrap:wrap;">
+            <div class="progress-circle" id="weeklyProgress" style="--pct: 0%;">
+                <div class="progress-circle-inner" id="weeklyPct">0%</div>
+            </div>
+            <div id="chartWeeklyProgress" class="chart-container" style="flex:1; min-width:300px;"></div>
+        </div>
+    </div>
+
+    <!-- Day Tabs -->
+    <div class="day-tabs" id="dayTabs"></div>
+
+    <!-- Day Content -->
+    <div id="dayContent"></div>
+</div>
+
+<!-- Error -->
+<div class="error-box" id="exerciseError"></div>
+
+<!-- ═══ 3D FBX VIEWER MODAL ═══ -->
+<div class="fbx-modal" id="fbxModal">
+    <div class="fbx-modal-content">
+        <!-- Header -->
+        <div class="fbx-header">
+            <div class="fbx-header-left">
+                <div class="fbx-icon">&#x1F3CB;</div>
+                <div>
+                    <h3 id="fbxTitle">Exercise Animation</h3>
+                    <p class="fbx-subtitle">3D Preview &bull; Drag to rotate &bull; Scroll to zoom</p>
+                </div>
+            </div>
+            <button class="fbx-close-btn" id="fbxClose">&times;</button>
+        </div>
+        <!-- 3D Viewport -->
+        <div class="fbx-viewport" id="fbxViewport">
+            <canvas id="fbxCanvas"></canvas>
+            <!-- Loading overlay -->
+            <div class="fbx-loading" id="fbxLoading">
+                <div class="fbx-loading-spinner"></div>
+                <p>Loading 3D Model...</p>
+                <div class="fbx-progress-track">
+                    <div class="fbx-progress-bar" id="fbxProgress"></div>
+                </div>
+            </div>
+        </div>
+        <!-- Controls hint -->
+        <div class="fbx-controls-hint">
+            <span>&#x1F5B1; Left drag: Rotate</span>
+            <span>&#x1F5B1; Right drag: Pan</span>
+            <span>&#x2638; Scroll: Zoom</span>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block head %}
+<!-- Three.js core + loaders (r128 — last version with legacy examples/js/) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/ColladaLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js"></script>
+{% endblock %}
+
+{% block scripts %}
+{% if data and data.latest_scan %}
+<script>
+    const EXISTING_PLAN = {{ (plan.plan_data if plan else 'null') | tojson }};
+    const EXISTING_PLAN_ID = {{ plan.id if plan else 'null' }};
+</script>
+<script src="/static/js/fbx-viewer.js?v=2"></script>
+<script src="/static/js/exercise.js"></script>
+{% endif %}
+{% endblock %}

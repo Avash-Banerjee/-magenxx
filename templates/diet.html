@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}FitScan — Diet Plan{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>🥗 Diet Plan</h1>
+    <p class="subtitle">AI-powered nutrition based on your body type & goals</p>
+</div>
+
+{% if not data or not data.latest_scan %}
+<div class="card" style="text-align:center; padding:60px 30px;">
+    <h2 style="margin-bottom:12px;">Scan Required</h2>
+    <p style="color:var(--text-muted); margin-bottom:20px;">Complete a body scan first to generate your diet plan.</p>
+    <a href="/scan" class="btn btn-sm" style="text-decoration:none; display:inline-block;">📸 Go to Body Scan</a>
+</div>
+{% else %}
+
+<!-- Plan Controls -->
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div>
+            <p style="color:var(--text-muted); font-size:0.85rem;">
+                Body type: <strong style="color:var(--accent-1);">{{ data.latest_scan.body_type }}</strong> &bull;
+                Goal: <strong>{{ ', '.join(data.goals) if data.goals else 'General Fitness' }}</strong> &bull;
+                Diet: <strong>{{ (data.diet_preferences or {}).get('diet_type', 'Non-Veg') | replace('_', ' ') | title }}</strong>
+            </p>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+            <label class="toggle-label" style="font-size:0.85rem; display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <span>🇮🇳 Indianize</span>
+                <input type="checkbox" id="toggleIndianize" class="toggle-check" onchange="handleIndianizeToggle(this.checked)">
+                <span class="toggle-slider"></span>
+            </label>
+            <button class="btn btn-sm" id="btnGenerate" onclick="generateDietPlan()">
+                ✨ Generate Plan
+            </button>
+        </div>
+    </div>
+    <p id="dietSummary" style="color:var(--text-muted); font-size:0.85rem; margin-top:12px; display:none;"></p>
+</div>
+
+<!-- Loading -->
+<div class="loading" id="dietLoading">
+    <div class="spinner"></div>
+    <p>Generating your personalized diet plan with AI...</p>
+    <p style="color:var(--text-dim); font-size:0.82rem;">This may take 15-30 seconds</p>
+</div>
+
+<!-- Plan Content -->
+<div id="dietPlanContent" style="display:none;">
+
+    <!-- Macro Overview -->
+    <div class="card">
+        <h2>📊 Daily Nutrition Target</h2>
+        <div style="display:flex; align-items:center; gap:24px; flex-wrap:wrap;">
+            <div id="chartMacroDonut" class="chart-container" style="width:220px; min-width:200px;"></div>
+            <div style="flex:1; min-width:280px;">
+                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));">
+                    <div class="stat-card">
+                        <div class="stat-value" id="statCalories">—</div>
+                        <div class="stat-label">Daily Calories</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color:#e74c3c;" id="statProtein">—</div>
+                        <div class="stat-label">Protein (g)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color:#667eea;" id="statCarbs">—</div>
+                        <div class="stat-label">Carbs (g)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color:#e67e22;" id="statFats">—</div>
+                        <div class="stat-label">Fats (g)</div>
+                    </div>
+                </div>
+                <div id="proteinPerKg" style="color:var(--text-dim); font-size:0.82rem; text-align:center; margin-top:8px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Daily Calorie Chart -->
+    <div class="card">
+        <h2>📅 Daily Calorie Breakdown</h2>
+        <div id="chartDailyCalories" class="chart-container"></div>
+    </div>
+
+    <!-- Day Tabs -->
+    <div class="day-tabs" id="dietDayTabs"></div>
+
+    <!-- Day Content (Meals) -->
+    <div id="dietDayContent"></div>
+
+    <!-- Grocery List -->
+    <div class="card" id="grocerySection" style="display:none;">
+        <h2 style="margin-bottom:16px;">🛒 Weekly Grocery List</h2>
+        <div class="grocery-list" id="groceryList"></div>
+    </div>
+
+    <!-- Weekly Notes -->
+    <div class="card" id="weeklyNotesSection" style="display:none;">
+        <h2 style="margin-bottom:8px;">💡 Weekly Tips</h2>
+        <p id="weeklyNotes" style="color:var(--text-muted); font-size:0.9rem; line-height:1.6;"></p>
+    </div>
+</div>
+
+<!-- Error -->
+<div class="error-box" id="dietError"></div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if data and data.latest_scan %}
+<script>
+    const EXISTING_DIET_PLAN = {{ (plan.plan_data if plan else 'null') | tojson }};
+    const EXISTING_DIET_PLAN_ID = {{ plan.id if plan else 'null' }};
+    const EXISTING_INDIANIZED = {{ (plan.indianized if plan else 0) | tojson }};
+</script>
+<script src="/static/js/diet.js"></script>
+{% endif %}
+{% endblock %}

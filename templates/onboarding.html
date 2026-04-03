@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}FitScan — Setup Profile{% endblock %}
+
+{% block content %}
+<div style="max-width:600px; margin:0 auto;">
+    <h1>FitScan</h1>
+    <p class="subtitle">Let's set up your fitness profile</p>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar-container" id="progressBar">
+        <div class="progress-step active" data-step="1"></div>
+        <div class="progress-step" data-step="2"></div>
+        <div class="progress-step" data-step="3"></div>
+        <div class="progress-step" data-step="4"></div>
+        <div class="progress-step" data-step="5"></div>
+        <div class="progress-step" data-step="6"></div>
+    </div>
+    <div class="step-label" id="stepLabel">Step 1 of 6 — Physical Profile</div>
+
+    <!-- ═══════ STEP 1: Physical Profile ═══════ -->
+    <div class="card step-panel" id="step1">
+        <h2>📏 Physical Profile</h2>
+        <div class="form-group">
+            <label>Your Name</label>
+            <input type="text" id="inputName" placeholder="e.g. Rahul" value="{{ session.get('user_name', '') }}">
+        </div>
+        <div class="form-group">
+            <label>Biological Gender</label>
+            <div class="select-grid" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="select-card" data-field="gender" data-value="male" onclick="selectSingle(this)">
+                    <div class="icon">🙋‍♂️</div>
+                    <div class="label">Male</div>
+                </div>
+                <div class="select-card" data-field="gender" data-value="female" onclick="selectSingle(this)">
+                    <div class="icon">🙋‍♀️</div>
+                    <div class="label">Female</div>
+                </div>
+                <div class="select-card" data-field="gender" data-value="other" onclick="selectSingle(this)">
+                    <div class="icon">🧑</div>
+                    <div class="label">Other</div>
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Age</label>
+            <input type="number" id="inputAge" placeholder="e.g. 22" min="10" max="100">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Height (cm)</label>
+                <input type="number" id="inputHeight" placeholder="e.g. 175" step="0.1" min="100" max="250">
+            </div>
+            <div class="form-group">
+                <label>Weight (kg)</label>
+                <input type="number" id="inputWeight" placeholder="e.g. 70" step="0.1" min="30" max="300">
+            </div>
+        </div>
+        <button class="btn" onclick="goStep(2)">Continue →</button>
+    </div>
+
+    <!-- ═══════ STEP 2: Objectives & Target Weight ═══════ -->
+    <div class="card step-panel hidden" id="step2">
+        <h2>🎯 Your Objectives</h2>
+        <div class="form-group">
+            <label>What do you want to achieve? (select all that apply)</label>
+            <div class="select-grid" style="grid-template-columns: repeat(2, 1fr);">
+                <div class="select-card" data-field="goals" data-value="fat_loss" onclick="toggleMulti(this)">
+                    <div class="icon">🔥</div>
+                    <div class="label">Lose Weight</div>
+                </div>
+                <div class="select-card" data-field="goals" data-value="muscle_gain" onclick="toggleMulti(this)">
+                    <div class="icon">💪</div>
+                    <div class="label">Gain Muscles</div>
+                </div>
+                <div class="select-card" data-field="goals" data-value="athletics" onclick="toggleMulti(this)">
+                    <div class="icon">🏃</div>
+                    <div class="label">Athletics</div>
+                </div>
+                <div class="select-card" data-field="goals" data-value="sports" onclick="toggleMulti(this)">
+                    <div class="icon">⚽</div>
+                    <div class="label">Sports</div>
+                </div>
+                <div class="select-card" data-field="goals" data-value="strength" onclick="toggleMulti(this)">
+                    <div class="icon">🏋️</div>
+                    <div class="label">Strength</div>
+                </div>
+                <div class="select-card" data-field="goals" data-value="flexibility" onclick="toggleMulti(this)">
+                    <div class="icon">🧘</div>
+                    <div class="label">Flexibility</div>
+                </div>
+                <div class="select-card" data-field="goals" data-value="general_fitness" onclick="toggleMulti(this)">
+                    <div class="icon">❤️</div>
+                    <div class="label">Stay Fit</div>
+                </div>
+                <div class="select-card" data-field="goals" data-value="endurance" onclick="toggleMulti(this)">
+                    <div class="icon">🫁</div>
+                    <div class="label">Endurance</div>
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Target Weight (kg) — optional</label>
+            <input type="number" id="inputTargetWeight" placeholder="e.g. 65" step="0.1" min="30" max="300">
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-outline btn-sm" onclick="goStep(1)">← Back</button>
+            <button class="btn" onclick="goStep(3)">Continue →</button>
+        </div>
+    </div>
+
+    <!-- ═══════ STEP 3: Fitness Background ═══════ -->
+    <div class="card step-panel hidden" id="step3">
+        <h2>💪 Fitness Background</h2>
+
+        <div class="form-group">
+            <label>Current Fitness Level</label>
+            <div class="select-grid" style="grid-template-columns: repeat(2, 1fr);">
+                <div class="select-card" data-field="experience" data-value="beginner" onclick="selectSingle(this)">
+                    <div class="icon">🌱</div>
+                    <div class="label">Beginner</div>
+                    <div class="desc">New to fitness / rarely work out</div>
+                </div>
+                <div class="select-card" data-field="experience" data-value="intermediate" onclick="selectSingle(this)">
+                    <div class="icon">🔥</div>
+                    <div class="label">Intermediate</div>
+                    <div class="desc">1-3 years, work out regularly</div>
+                </div>
+                <div class="select-card" data-field="experience" data-value="advanced" onclick="selectSingle(this)">
+                    <div class="icon">⚡</div>
+                    <div class="label">Advanced</div>
+                    <div class="desc">3+ years consistent training</div>
+                </div>
+                <div class="select-card" data-field="experience" data-value="athlete" onclick="selectSingle(this)">
+                    <div class="icon">🏆</div>
+                    <div class="label">Athlete</div>
+                    <div class="desc">Competitive / sport-specific</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Days per Week</label>
+                <div class="select-grid" style="grid-template-columns: repeat(7, 1fr);">
+                    {% for d in range(1, 8) %}
+                    <div class="select-card" data-field="days" data-value="{{ d }}" onclick="selectSingle(this)" style="padding:10px;">
+                        <div class="label">{{ d }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Minutes per Session</label>
+            <div class="select-grid" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="select-card" data-field="minutes" data-value="30" onclick="selectSingle(this)" style="padding:10px;">
+                    <div class="label">30</div>
+                    <div class="desc">Quick</div>
+                </div>
+                <div class="select-card" data-field="minutes" data-value="45" onclick="selectSingle(this)" style="padding:10px;">
+                    <div class="label">45</div>
+                    <div class="desc">Standard</div>
+                </div>
+                <div class="select-card" data-field="minutes" data-value="60" onclick="selectSingle(this)" style="padding:10px;">
+                    <div class="label">60</div>
+                    <div class="desc">Full</div>
+                </div>
+                <div class="select-card" data-field="minutes" data-value="90" onclick="selectSingle(this)" style="padding:10px;">
+                    <div class="label">90</div>
+                    <div class="desc">Extended</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Preferred Time</label>
+            <div class="select-grid" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="select-card" data-field="time" data-value="morning" onclick="selectSingle(this)">
+                    <div class="icon">🌅</div>
+                    <div class="label">Morning</div>
+                </div>
+                <div class="select-card" data-field="time" data-value="afternoon" onclick="selectSingle(this)">
+                    <div class="icon">☀️</div>
+                    <div class="label">Afternoon</div>
+                </div>
+                <div class="select-card" data-field="time" data-value="evening" onclick="selectSingle(this)">
+                    <div class="icon">🌙</div>
+                    <div class="label">Evening</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-outline btn-sm" onclick="goStep(2)">← Back</button>
+            <button class="btn" onclick="goStep(4)">Continue →</button>
+        </div>
+    </div>
+
+    <!-- ═══════ STEP 4: Target Muscle Groups ═══════ -->
+    <div class="card step-panel hidden" id="step4">
+        <h2>🎯 Target Muscle Groups</h2>
+        <div class="form-group">
+            <label>Which muscles do you want to focus on? (select all)</label>
+            <div class="select-grid" style="grid-template-columns: repeat(3, 1fr);">
+                {% for m in [('chest','🫁','Chest'), ('back','🔙','Back'), ('shoulders','🤷','Shoulders'),
+                             ('arms','💪','Arms'), ('legs','🦵','Legs'), ('core','🎯','Core'), ('glutes','🍑','Glutes')] %}
+                <div class="select-card" data-field="muscles" data-value="{{ m[0] }}" onclick="toggleMulti(this)">
+                    <div class="icon">{{ m[1] }}</div>
+                    <div class="label">{{ m[2] }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-outline btn-sm" onclick="goStep(3)">← Back</button>
+            <button class="btn" onclick="goStep(5)">Continue →</button>
+        </div>
+    </div>
+
+    <!-- ═══════ STEP 5: Equipment ═══════ -->
+    <div class="card step-panel hidden" id="step5">
+        <h2>🏠 Available Equipment</h2>
+        <div class="form-group">
+            <label>What equipment do you have? (select all)</label>
+            <div class="select-grid" style="grid-template-columns: repeat(2, 1fr);">
+                {% for e in [('dumbbells','🏋️','Dumbbells'), ('barbell','🏋️‍♂️','Barbell'),
+                             ('machines','⚙️','Machines'), ('bodyweight','🤸','Bodyweight Only'),
+                             ('resistance_bands','🔗','Resistance Bands'), ('cable_machine','🔌','Cable Machine'),
+                             ('pullup_bar','🔩','Pull-up Bar'), ('kettlebells','🔔','Kettlebells')] %}
+                <div class="select-card" data-field="equipment" data-value="{{ e[0] }}" onclick="toggleMulti(this)">
+                    <div class="icon">{{ e[1] }}</div>
+                    <div class="label">{{ e[2] }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-outline btn-sm" onclick="goStep(4)">← Back</button>
+            <button class="btn" onclick="goStep(6)">Continue →</button>
+        </div>
+    </div>
+
+    <!-- ═══════ STEP 6: Diet Preferences ═══════ -->
+    <div class="card step-panel hidden" id="step6">
+        <h2>🥗 Diet Preferences</h2>
+        <div class="form-group">
+            <label>Diet Preference</label>
+            <div class="select-grid" style="grid-template-columns: repeat(3, 1fr);">
+                {% for d in [('veg','🥦','Vegetarian'), ('non_veg','🍗','Non-Veg'),
+                             ('vegan','🌱','Vegan'), ('keto','🥑','Keto'),
+                             ('paleo','🥩','Paleo'), ('mediterranean','🫒','Mediterranean')] %}
+                <div class="select-card" data-field="diet" data-value="{{ d[0] }}" onclick="selectSingle(this)">
+                    <div class="icon">{{ d[1] }}</div>
+                    <div class="label">{{ d[2] }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="toggle-row">
+            <label class="toggle">
+                <input type="checkbox" id="indianizeToggle">
+                <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label">🇮🇳 Indianize my diet plan (dal, roti, paneer, etc.)</span>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button class="btn btn-outline btn-sm" onclick="goStep(5)">← Back</button>
+            <button class="btn btn-green" onclick="submitProfile()">✅ Complete Setup</button>
+        </div>
+    </div>
+
+    <!-- Loading state -->
+    <div class="loading" id="onboardingLoading">
+        <div class="spinner"></div>
+        <p>Saving your profile...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/onboarding.js"></script>
+{% endblock %}

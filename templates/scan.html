@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}FitScan — Body Scan{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📸 Body Scan</h1>
+    <p class="subtitle">MediaPipe Pose (local) + HMR Somatotype (Colab GPU)</p>
+</div>
+
+<div class="status-bar">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Checking Colab connection...</span>
+</div>
+
+<!-- INPUT FORM -->
+<form id="classifyForm" enctype="multipart/form-data">
+    <div class="card">
+        <h2>📸 Photo</h2>
+        <div class="tab-row">
+            <div class="tab-btn active" id="tabCam" onclick="switchTab('cam')">📷 Webcam</div>
+            <div class="tab-btn" id="tabUpload" onclick="switchTab('upload')">📁 Upload File</div>
+        </div>
+
+        <!-- Webcam panel -->
+        <div id="panelCam">
+            <div class="cam-box">
+                <div class="cam-placeholder" id="camPlaceholder">
+                    <div class="icon">📷</div>
+                    <div class="text">Click "Start Camera" — photo taken in 5 seconds</div>
+                </div>
+                <video id="videoEl" autoplay playsinline></video>
+                <img id="capturedImg" alt="Captured photo">
+                <div class="countdown-ring" id="countdownRing"></div>
+                <div class="capture-flash" id="captureFlash"></div>
+            </div>
+            <div class="cam-controls">
+                <button type="button" id="btnStartCam" onclick="startCamera()">▶ Start Camera</button>
+                <button type="button" id="btnRetake" onclick="retakePhoto()">↩ Retake</button>
+            </div>
+        </div>
+
+        <!-- Upload panel -->
+        <div id="panelUpload" style="display:none">
+            <div class="upload-zone shown" onclick="document.getElementById('imageInput').click()">
+                <input type="file" id="imageInput" accept="image/*">
+                <div class="icon">📁</div>
+                <div class="text">Click to upload a full-body front-facing photo</div>
+                <div class="filename" id="fileName"></div>
+                <img class="preview-img" id="imagePreview" style="display:none">
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>📏 Your Measurements</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Height (cm)</label>
+                <input type="number" id="heightInput" name="height_cm"
+                       value="{{ profile.height_cm if profile else '' }}"
+                       placeholder="e.g. 175" step="0.1" min="100" max="250" required>
+            </div>
+            <div class="form-group">
+                <label>Weight (kg)</label>
+                <input type="number" id="weightInput" name="weight_kg"
+                       value="{{ profile.weight_kg if profile else '' }}"
+                       placeholder="e.g. 70" step="0.1" min="30" max="300" required>
+            </div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn" id="submitBtn">🔬 Analyze Body Type</button>
+</form>
+
+<!-- LOADING -->
+<div class="loading" id="loadingSection">
+    <div class="spinner"></div>
+    <p>Analyzing your body type...</p>
+    <div class="step-status" id="stepStatus">
+        <div class="step active" id="stepPose">⏳ Step 1: MediaPipe Pose Analysis (local)...</div>
+        <div class="step" id="stepColab">⬜ Step 2: HMR Inference on Colab GPU...</div>
+    </div>
+    <div class="timer" id="timer">0s</div>
+</div>
+
+<!-- ERROR -->
+<div class="error-box" id="errorBox"></div>
+
+<!-- RESULTS -->
+<div class="results" id="resultsSection">
+    <div class="card">
+        <div class="result-header">
+            <div class="body-type-label" id="bodyTypeLabel"></div>
+            <div class="classification-label" id="classLabel"></div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card endo"><div class="value" id="endoVal"></div><div class="label">Endomorphy</div></div>
+            <div class="stat-card meso"><div class="value" id="mesoVal"></div><div class="label">Mesomorphy</div></div>
+            <div class="stat-card ecto"><div class="value" id="ectoVal"></div><div class="label">Ectomorphy</div></div>
+        </div>
+
+        <div class="bar-chart">
+            <div class="bar-row"><span class="bar-label">Endomorphy</span><div class="bar-track"><div class="bar-fill endo" id="endoBar"></div></div></div>
+            <div class="bar-row"><span class="bar-label">Mesomorphy</span><div class="bar-track"><div class="bar-fill meso" id="mesoBar"></div></div></div>
+            <div class="bar-row"><span class="bar-label">Ectomorphy</span><div class="bar-track"><div class="bar-fill ecto" id="ectoBar"></div></div></div>
+        </div>
+
+        <!-- Somatotype Plotly Charts -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:20px;">
+            <div id="somatoRadar" style="width:100%; height:320px;"></div>
+            <div id="somatoBar" style="width:100%; height:320px;"></div>
+        </div>
+
+        <div class="interpretation-box" id="interpBox"></div>
+    </div>
+
+    <!-- Pose + Symmetry -->
+    <div class="results-grid">
+        <div class="card pose-card">
+            <h2>🦴 MediaPipe Pose Skeleton</h2>
+            <img id="poseImage" alt="Annotated pose">
+            <p style="color:var(--text-dim); font-size:0.8rem; margin-top:8px;">
+                33 landmarks detected via MediaPipe (local CPU)
+            </p>
+        </div>
+        <div class="card">
+            <h2>⚖️ Body Symmetry</h2>
+            <p style="color:var(--text-dim); font-size:0.8rem; margin-bottom:16px;">
+                Left/Right ratios — 1.00 = perfect symmetry
+            </p>
+            <div id="symmetryBars"></div>
+            <div class="section-divider">Body Proportions</div>
+            <table class="measurements-table" id="proportionsTable">
+                <thead><tr><th>Proportion</th><th>Ratio</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Segments -->
+    <div class="card">
+        <h2>📏 Joint Segment Lengths</h2>
+        <p style="color:var(--text-dim); font-size:0.8rem; margin-bottom:12px;">
+            Measured via MediaPipe landmarks. CM values derived from your height.
+        </p>
+        <table class="measurements-table" id="segmentsTable">
+            <thead><tr><th>Segment</th><th>Pixels</th><th>Estimated CM</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- HMR + Ratios -->
+    <div class="results-grid">
+        <div class="card">
+            <h2>📐 HMR Measurements (cm)</h2>
+            <p style="color:var(--text-dim); font-size:0.8rem; margin-bottom:12px;">From Colab HMR model</p>
+            <table class="measurements-table" id="measTable">
+                <thead><tr><th>Part</th><th>Value (cm)</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="card">
+            <h2>📊 Computed Ratios (Hybrid)</h2>
+            <p style="color:var(--text-dim); font-size:0.8rem; margin-bottom:12px;">Used for somatotype classification</p>
+            <table class="measurements-table" id="ratioTable">
+                <thead><tr><th>Ratio</th><th>Value</th><th>Source</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Input summary -->
+    <div class="card">
+        <h2>ℹ️ Input Summary</h2>
+        <table class="measurements-table" id="inputTable">
+            <thead><tr><th>Field</th><th>Value</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- Action buttons after scan -->
+    <div style="display:flex; gap:12px; margin-top:24px;">
+        <a href="/dashboard" class="btn" style="text-decoration:none; text-align:center;">📊 View Dashboard</a>
+        <button class="btn btn-outline" onclick="window.scrollTo({top:0,behavior:'smooth'}); document.getElementById('resultsSection').classList.remove('active');">🔄 Scan Again</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const COLAB = "{{ colab_url }}";
+</script>
+<script src="/static/js/scan.js"></script>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}FitScan — Create Account{% endblock %}
+
+{% block content %}
+<div style="max-width:440px; margin:60px auto 0;">
+    <h1>FitScan</h1>
+    <p class="subtitle">Create your fitness account</p>
+
+    <div class="card">
+        <h2 style="text-align:center;">Create Account</h2>
+        <div id="registerError" class="error-box" style="margin-bottom:16px;"></div>
+
+        <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="inputName" placeholder="e.g. Rahul" autofocus>
+        </div>
+        <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="inputEmail" placeholder="you@example.com">
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="inputPassword" placeholder="At least 6 characters">
+        </div>
+        <div class="form-group">
+            <label>Confirm Password</label>
+            <input type="password" id="inputConfirm" placeholder="Re-enter password">
+        </div>
+
+        <button class="btn" id="btnRegister" onclick="doRegister()">Create Account</button>
+
+        <p style="text-align:center; margin-top:20px; color:var(--text-muted); font-size:0.88rem;">
+            Already have an account?
+            <a href="/login" style="color:var(--accent-1); text-decoration:none; font-weight:600;">Sign In</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function doRegister() {
+    const name = document.getElementById("inputName").value.trim();
+    const email = document.getElementById("inputEmail").value.trim();
+    const password = document.getElementById("inputPassword").value;
+    const confirm = document.getElementById("inputConfirm").value;
+    const errBox = document.getElementById("registerError");
+    const btn = document.getElementById("btnRegister");
+
+    errBox.classList.remove("active");
+
+    if (!name) { errBox.textContent = "Please enter your name."; errBox.classList.add("active"); return; }
+    if (!email || !email.includes("@")) { errBox.textContent = "Please enter a valid email."; errBox.classList.add("active"); return; }
+    if (password.length < 6) { errBox.textContent = "Password must be at least 6 characters."; errBox.classList.add("active"); return; }
+    if (password !== confirm) { errBox.textContent = "Passwords do not match."; errBox.classList.add("active"); return; }
+
+    btn.disabled = true;
+    btn.textContent = "Creating account...";
+
+    try {
+        const resp = await apiPost("/api/auth/register", { name, email, password, confirm_password: confirm });
+        if (resp.error) {
+            errBox.textContent = resp.error;
+            errBox.classList.add("active");
+        } else {
+            window.location.href = resp.redirect || "/onboarding";
+        }
+    } catch (err) {
+        errBox.textContent = err.message;
+        errBox.classList.add("active");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Create Account";
+    }
+}
+
+document.getElementById("inputConfirm").addEventListener("keydown", e => {
+    if (e.key === "Enter") doRegister();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FitScan{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {% block body_layout %}
+    {# ── Standard Layout: Top Nav (default for most pages) ── #}
+    {% if show_nav is not defined or show_nav %}
+    <nav class="nav">
+        <div class="nav-inner">
+            <a href="/" class="nav-brand">FitScan</a>
+            {% if session.get('user_id') %}
+            <a href="/scan" class="nav-link {{ 'active' if active_page == 'scan' }}">Scan</a>
+            <a href="/dashboard" class="nav-link {{ 'active' if active_page == 'dashboard' }}">Dashboard</a>
+            <a href="/exercise" class="nav-link {{ 'active' if active_page == 'exercise' }}">Exercise</a>
+            <a href="/diet" class="nav-link {{ 'active' if active_page == 'diet' }}">Diet</a>
+            <div class="nav-spacer"></div>
+            <div class="nav-user">
+                {{ session.get('user_name', 'Guest') }}
+            </div>
+            <a href="/logout" class="nav-link" style="color:var(--red); font-size:0.82rem;">Sign Out</a>
+            {% else %}
+            <div class="nav-spacer"></div>
+            {% endif %}
+        </div>
+    </nav>
+    {% endif %}
+
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    {% endblock %}
+
+    <script src="/static/js/common.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
