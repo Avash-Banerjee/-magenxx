@@ -1,7 +1,7 @@
 """
 FitScan — Full Health & Gym Application
 Flask backend with MediaPipe pose analysis, Colab HMR integration,
-Gemini-powered exercise & diet plans.
+and a rule-engine-powered exercise & diet planner (no external AI API).
 
   python app.py
   → http://localhost:5050
@@ -308,7 +308,7 @@ def api_scan_history():
 
 @app.route("/api/exercise/generate", methods=["POST"])
 def api_generate_exercise():
-    """Generate exercise plan using Gemini."""
+    """Generate exercise plan using the rule engine."""
     if not session.get("user_id"):
         return jsonify({"error": "Not logged in"}), 401
 
@@ -482,7 +482,7 @@ def api_exercise_animations():
 
 @app.route("/api/diet/generate", methods=["POST"])
 def api_generate_diet():
-    """Generate diet plan using Gemini."""
+    """Generate diet plan using the rule engine."""
     if not session.get("user_id"):
         return jsonify({"error": "Not logged in"}), 401
 

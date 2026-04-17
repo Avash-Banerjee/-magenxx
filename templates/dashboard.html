@@ -171,56 +171,69 @@
             {# Position on a linear scale: 0%=pure endo, 50%=pure meso, 100%=pure ecto #}
             {% set tendency = (((ecto - endo) / (soma_total if soma_total > 0 else 1) * 50) + 50) | int %}
             {% set tendency = [5, [tendency, 95] | min] | max %}
-            <div class="somatotype-tracker">
-                <div class="soma-tracker-title">Body Type Tendency</div>
-                <div class="soma-tracker-value">{{ scan.body_type or 'Unknown' }}</div>
-
-                <!-- Linear gradient bar -->
-                <div class="soma-bar-container">
-                    <div class="soma-bar">
-                        <div class="soma-bar-fill"></div>
-                        <!-- Marker for user's position -->
-                        <div class="soma-marker" style="left:{{ tendency }}%;">
-                            <div class="soma-marker-dot"></div>
-                            <div class="soma-marker-label">You</div>
-                        </div>
-                    </div>
-                    <div class="soma-bar-labels">
-                        <span class="soma-label-end">Endo</span>
-                        <span class="soma-label-mid">Meso</span>
-                        <span class="soma-label-end">Ecto</span>
-                    </div>
+            <!-- Somatotype Triangle -->
+            <div class="somatotype-triangle-wrap">
+                <div class="soma-tri-title">Body Type Tendency</div>
+                <div class="soma-tri-label-name">{{ scan.body_type or 'Unknown' }}</div>
+                <div class="soma-tri-canvas-wrap">
+                    <svg viewBox="0 0 220 200" class="soma-tri-svg" id="somatypeSvg">
+                        <!-- Triangle outline -->
+                        <defs>
+                            <linearGradient id="triEndoGrad" x1="0%" y1="100%" x2="50%" y2="0%">
+                                <stop offset="0%" stop-color="#ef444440"/>
+                                <stop offset="100%" stop-color="#ef444408"/>
+                            </linearGradient>
+                            <linearGradient id="triMesoGrad" x1="50%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#10b98140"/>
+                                <stop offset="100%" stop-color="#10b98108"/>
+                            </linearGradient>
+                            <linearGradient id="triEctoGrad" x1="100%" y1="100%" x2="0%" y2="100%">
+                                <stop offset="0%" stop-color="#8b5cf640"/>
+                                <stop offset="100%" stop-color="#8b5cf608"/>
+                            </linearGradient>
+                            <filter id="dotGlow">
+                                <feGaussianBlur stdDeviation="3" result="blur"/>
+                                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                            </filter>
+                        </defs>
+                        <!-- Triangle vertices: top=Meso, bottom-left=Endo, bottom-right=Ecto -->
+                        <polygon points="110,12 14,178 206,178" fill="rgba(6,182,212,0.04)" stroke="rgba(6,182,212,0.25)" stroke-width="1.5"/>
+                        <!-- Colored corner fills -->
+                        <polygon points="110,12 14,178 62,178 90,95" fill="url(#triEndoGrad)"/>
+                        <polygon points="110,12 158,95 206,178 130,178" fill="url(#triMesoGrad)"/>
+                        <polygon points="62,178 206,178 158,95 90,95" fill="url(#triEctoGrad)"/>
+                        <!-- Grid lines inside triangle (3 levels) -->
+                        <line x1="62" y1="95" x2="158" y2="95" stroke="rgba(100,116,139,0.15)" stroke-width="1"/>
+                        <line x1="38" y1="137" x2="182" y2="137" stroke="rgba(100,116,139,0.15)" stroke-width="1"/>
+                        <!-- Corner labels -->
+                        <text x="110" y="9" text-anchor="middle" fill="#10b981" font-size="9" font-weight="700" font-family="Inter,sans-serif">MESO</text>
+                        <text x="10" y="192" text-anchor="start" fill="#ef4444" font-size="9" font-weight="700" font-family="Inter,sans-serif">ENDO</text>
+                        <text x="210" y="192" text-anchor="end" fill="#8b5cf6" font-size="9" font-weight="700" font-family="Inter,sans-serif">ECTO</text>
+                        <!-- Corner values -->
+                        <text x="110" y="22" text-anchor="middle" fill="#10b981" font-size="8" font-family="Inter,sans-serif">{{ "%.1f"|format(meso) }}</text>
+                        <text x="14" y="188" text-anchor="start" fill="#ef4444" font-size="8" font-family="Inter,sans-serif">{{ "%.1f"|format(endo) }}</text>
+                        <text x="206" y="188" text-anchor="end" fill="#8b5cf6" font-size="8" font-family="Inter,sans-serif">{{ "%.1f"|format(ecto) }}</text>
+                        <!-- User dot — barycentric position. Compute from endo/meso/ecto -->
+                        {% set soma_total = endo + meso + ecto %}
+                        {% if soma_total > 0 %}
+                          {% set pe = endo / soma_total %}
+                          {% set pm = meso / soma_total %}
+                          {% set pc = ecto / soma_total %}
+                          {# Triangle vertices: Meso(110,12) Endo(14,178) Ect(206,178) #}
+                          {% set dot_x = (110 * pm + 14 * pe + 206 * pc) | int %}
+                          {% set dot_y = (12 * pm + 178 * pe + 178 * pc) | int %}
+                        {% else %}
+                          {% set dot_x = 110 %}{% set dot_y = 122 %}
+                        {% endif %}
+                        <circle id="somatoDot" cx="{{ dot_x }}" cy="{{ dot_y }}" r="8" fill="#06b6d4" opacity="0.95" filter="url(#dotGlow)"/>
+                        <circle cx="{{ dot_x }}" cy="{{ dot_y }}" r="3.5" fill="white"/>
+                        <text x="{{ dot_x }}" y="{{ dot_y - 12 }}" text-anchor="middle" fill="#0e7490" font-size="7.5" font-weight="700" font-family="Inter,sans-serif">You</text>
+                    </svg>
                 </div>
-
-                <!-- Component breakdown -->
-                <div class="soma-breakdown">
-                    <div class="soma-comp">
-                        <div class="soma-comp-bar">
-                            <div class="soma-comp-fill endo" style="width:{{ (endo / 7 * 100) | int }}%"></div>
-                        </div>
-                        <div class="soma-comp-info">
-                            <span class="soma-comp-name">Endo</span>
-                            <span class="soma-comp-val">{{ "%.1f"|format(endo) }}</span>
-                        </div>
-                    </div>
-                    <div class="soma-comp">
-                        <div class="soma-comp-bar">
-                            <div class="soma-comp-fill meso" style="width:{{ (meso / 7 * 100) | int }}%"></div>
-                        </div>
-                        <div class="soma-comp-info">
-                            <span class="soma-comp-name">Meso</span>
-                            <span class="soma-comp-val">{{ "%.1f"|format(meso) }}</span>
-                        </div>
-                    </div>
-                    <div class="soma-comp">
-                        <div class="soma-comp-bar">
-                            <div class="soma-comp-fill ecto" style="width:{{ (ecto / 7 * 100) | int }}%"></div>
-                        </div>
-                        <div class="soma-comp-info">
-                            <span class="soma-comp-name">Ecto</span>
-                            <span class="soma-comp-val">{{ "%.1f"|format(ecto) }}</span>
-                        </div>
-                    </div>
+                <div class="soma-tri-scores">
+                    <div class="soma-tri-score endo"><span class="dot"></span>Endo <strong>{{ "%.1f"|format(endo) }}</strong></div>
+                    <div class="soma-tri-score meso"><span class="dot"></span>Meso <strong>{{ "%.1f"|format(meso) }}</strong></div>
+                    <div class="soma-tri-score ecto"><span class="dot"></span>Ecto <strong>{{ "%.1f"|format(ecto) }}</strong></div>
                 </div>
             </div>
 
@@ -790,6 +803,354 @@
         </div>
     </div>
 </div>
+
+<!-- ═══ NEW WIDGETS ROW ═══ -->
+<div class="widgets-section">
+
+    <!-- Row 1: Vitals -->
+    <div class="widgets-row">
+
+        <!-- ❤️ Heart Rate -->
+        <div class="widget-card widget-heart">
+            <div class="widget-header">
+                <span class="widget-icon">❤️</span>
+                <span class="widget-title">Heart Rate</span>
+                <span class="widget-badge live">LIVE</span>
+            </div>
+            <div class="heart-bpm-wrap">
+                <span class="heart-bpm-num" id="heartBPM">72</span>
+                <span class="heart-bpm-unit">BPM</span>
+            </div>
+            <div class="heart-status normal" id="heartStatus">Normal</div>
+            <svg class="ecg-svg" id="ecgSvg" viewBox="0 0 260 60" preserveAspectRatio="none">
+                <polyline id="ecgLine" points="" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div class="widget-footer">Resting • Last sync: Just now</div>
+        </div>
+
+        <!-- 💧 Water Intake -->
+        <div class="widget-card widget-water">
+            <div class="widget-header">
+                <span class="widget-icon">💧</span>
+                <span class="widget-title">Water Intake</span>
+                <span class="widget-badge">TODAY</span>
+            </div>
+            <div class="water-bottle-wrap">
+                <svg class="water-bottle-svg" viewBox="0 0 80 130" id="waterBottleSvg">
+                    <defs>
+                        <clipPath id="bottleClip">
+                            <path d="M22,20 L58,20 L64,35 L64,115 Q64,122 57,122 L23,122 Q16,122 16,115 L16,35 Z"/>
+                        </clipPath>
+                        <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#38bdf8"/>
+                            <stop offset="100%" stop-color="#0284c7"/>
+                        </linearGradient>
+                    </defs>
+                    <!-- Bottle outline -->
+                    <path d="M28,8 L52,8 L58,20 L22,20 Z" fill="#cbd5e1" opacity="0.6"/>
+                    <path d="M22,20 L58,20 L64,35 L64,115 Q64,122 57,122 L23,122 Q16,122 16,115 L16,35 Z" fill="rgba(186,230,253,0.3)" stroke="#7dd3fc" stroke-width="1.5"/>
+                    <!-- Water fill (animated via JS) -->
+                    <rect id="waterFill" x="16" y="60" width="48" height="62" clip-path="url(#bottleClip)" fill="url(#waterGrad)" opacity="0.85"/>
+                    <!-- Shine -->
+                    <path d="M24,36 Q26,50 25,75" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2" stroke-linecap="round"/>
+                    <!-- Level marks -->
+                    <line x1="62" y1="73" x2="66" y2="73" stroke="#94a3b8" stroke-width="1"/>
+                    <line x1="62" y1="90" x2="66" y2="90" stroke="#94a3b8" stroke-width="1"/>
+                    <line x1="62" y1="107" x2="66" y2="107" stroke="#94a3b8" stroke-width="1"/>
+                </svg>
+                <div class="water-info">
+                    <div class="water-glasses"><span id="waterGlasses">4</span><span class="water-total">/8</span></div>
+                    <div class="water-glasses-label">glasses</div>
+                    <div class="water-ml" id="waterMl">1000 ml</div>
+                    <div class="water-btns">
+                        <button class="water-btn minus" onclick="changeWater(-1)">−</button>
+                        <button class="water-btn plus" onclick="changeWater(1)">+</button>
+                    </div>
+                </div>
+            </div>
+            <div class="widget-footer">Goal: 8 glasses · 2000 ml</div>
+        </div>
+
+        <!-- 🩸 SpO2 -->
+        <div class="widget-card widget-spo2">
+            <div class="widget-header">
+                <span class="widget-icon">🩸</span>
+                <span class="widget-title">Blood Oxygen</span>
+                <span class="widget-badge">SpO₂</span>
+            </div>
+            <div class="spo2-gauge-wrap">
+                <svg viewBox="0 0 120 70" class="spo2-svg">
+                    <defs>
+                        <linearGradient id="spo2Grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#f87171"/>
+                            <stop offset="60%" stop-color="#22d3ee"/>
+                            <stop offset="100%" stop-color="#10b981"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M10,60 A50,50 0 0,1 110,60" fill="none" stroke="#e5e7eb" stroke-width="10" stroke-linecap="round"/>
+                    <path id="spo2Arc" d="M10,60 A50,50 0 0,1 110,60" fill="none" stroke="url(#spo2Grad)" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 999"/>
+                </svg>
+                <div class="spo2-value-wrap">
+                    <span class="spo2-num" id="spo2Num">98</span>
+                    <span class="spo2-pct">%</span>
+                </div>
+            </div>
+            <div class="spo2-status" id="spo2Status">Normal</div>
+            <div class="widget-footer">Optimal range: 95–100%</div>
+        </div>
+
+        <!-- 😤 Stress Level -->
+        <div class="widget-card widget-stress">
+            <div class="widget-header">
+                <span class="widget-icon">🧘</span>
+                <span class="widget-title">Stress Level</span>
+                <span class="widget-badge">HRV</span>
+            </div>
+            <div class="stress-dots-wrap">
+                <div class="stress-dot active green" data-level="1" title="Low"></div>
+                <div class="stress-dot active green" data-level="2" title="Low-Mid"></div>
+                <div class="stress-dot" data-level="3" title="Moderate"></div>
+                <div class="stress-dot" data-level="4" title="High"></div>
+                <div class="stress-dot" data-level="5" title="Very High"></div>
+            </div>
+            <div class="stress-label" id="stressLabel">Low</div>
+            <div class="stress-desc" id="stressDesc">HRV looks good. You're recovered.</div>
+            <div class="stress-meter-wrap">
+                <div class="stress-meter-track">
+                    <div class="stress-meter-fill" id="stressFill" style="width:20%"></div>
+                </div>
+                <div class="stress-meter-labels">
+                    <span>Low</span><span>Moderate</span><span>High</span>
+                </div>
+            </div>
+            <div class="widget-footer">Based on HRV · Smartwatch sync soon</div>
+        </div>
+
+    </div>
+
+    <!-- Row 2: Progress & Activity -->
+    <div class="widgets-row">
+
+        <!-- 🔥 Workout Streak -->
+        <div class="widget-card widget-streak">
+            <div class="widget-header">
+                <span class="widget-icon">🔥</span>
+                <span class="widget-title">Workout Streak</span>
+            </div>
+            <div class="streak-main">
+                <div class="streak-fire">🔥</div>
+                <div class="streak-count" id="streakCount">7</div>
+                <div class="streak-unit">days</div>
+            </div>
+            <div class="streak-best">Best: <strong id="streakBest">12</strong> days</div>
+            <div class="streak-days-wrap" id="streakDays">
+                <!-- Filled by JS -->
+            </div>
+        </div>
+
+        <!-- 📅 Weekly Heatmap -->
+        <div class="widget-card widget-heatmap" style="grid-column: span 2;">
+            <div class="widget-header">
+                <span class="widget-icon">📅</span>
+                <span class="widget-title">Activity Heatmap</span>
+                <span class="widget-badge">12 weeks</span>
+            </div>
+            <div class="heatmap-wrap" id="heatmapGrid">
+                <!-- Filled by JS -->
+            </div>
+            <div class="heatmap-legend">
+                <span>Less</span>
+                <div class="heatmap-legend-cells">
+                    <div style="background:#f1f5f9"></div>
+                    <div style="background:#bae6fd"></div>
+                    <div style="background:#38bdf8"></div>
+                    <div style="background:#0284c7"></div>
+                    <div style="background:#0c4a6e"></div>
+                </div>
+                <span>More</span>
+            </div>
+        </div>
+
+        <!-- 🎯 Goal Progress -->
+        <div class="widget-card widget-goal">
+            <div class="widget-header">
+                <span class="widget-icon">🎯</span>
+                <span class="widget-title">Goal Progress</span>
+            </div>
+            <div class="goal-ring-wrap">
+                <svg viewBox="0 0 120 120" class="goal-ring-svg">
+                    <circle cx="60" cy="60" r="48" fill="none" stroke="#e5e7eb" stroke-width="10"/>
+                    <circle id="goalRingFill" cx="60" cy="60" r="48" fill="none" stroke="#06b6d4" stroke-width="10"
+                        stroke-linecap="round" stroke-dasharray="0 302" transform="rotate(-90 60 60)"
+                        style="transition: stroke-dasharray 1.5s cubic-bezier(0.4,0,0.2,1)"/>
+                    <text x="60" y="55" text-anchor="middle" fill="#0f172a" font-size="20" font-weight="700" font-family="Inter,sans-serif" id="goalPct">38%</text>
+                    <text x="60" y="72" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="Inter,sans-serif">complete</text>
+                </svg>
+            </div>
+            <div class="goal-label" id="goalLabel">Gain 5kg Muscle</div>
+            <div class="goal-sub" id="goalSub">1.9 kg gained · 3.1 kg to go</div>
+        </div>
+
+    </div>
+
+    <!-- Row 3: Analytics -->
+    <div class="widgets-row">
+
+        <!-- 🏆 Personal Records -->
+        <div class="widget-card widget-records" style="grid-column: span 2;">
+            <div class="widget-header">
+                <span class="widget-icon">🏆</span>
+                <span class="widget-title">Personal Records</span>
+                <span class="widget-badge">All time</span>
+            </div>
+            <div class="records-grid">
+                <div class="record-item">
+                    <div class="record-icon">🏋️</div>
+                    <div class="record-info">
+                        <div class="record-name">Bench Press</div>
+                        <div class="record-val">80 kg</div>
+                    </div>
+                    <div class="record-badge new">PR</div>
+                </div>
+                <div class="record-item">
+                    <div class="record-icon">🦵</div>
+                    <div class="record-info">
+                        <div class="record-name">Squat</div>
+                        <div class="record-val">100 kg</div>
+                    </div>
+                    <div class="record-badge"></div>
+                </div>
+                <div class="record-item">
+                    <div class="record-icon">🔱</div>
+                    <div class="record-info">
+                        <div class="record-name">Deadlift</div>
+                        <div class="record-val">120 kg</div>
+                    </div>
+                    <div class="record-badge new">PR</div>
+                </div>
+                <div class="record-item">
+                    <div class="record-icon">💪</div>
+                    <div class="record-info">
+                        <div class="record-name">Pull-ups</div>
+                        <div class="record-val">15 reps</div>
+                    </div>
+                    <div class="record-badge"></div>
+                </div>
+                <div class="record-item">
+                    <div class="record-icon">🏃</div>
+                    <div class="record-info">
+                        <div class="record-name">5km Run</div>
+                        <div class="record-val">24:30</div>
+                    </div>
+                    <div class="record-badge"></div>
+                </div>
+                <div class="record-item">
+                    <div class="record-icon">🤸</div>
+                    <div class="record-info">
+                        <div class="record-name">Plank</div>
+                        <div class="record-val">2:45 min</div>
+                    </div>
+                    <div class="record-badge new">PR</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ⚡ Muscle Recovery Map -->
+        <div class="widget-card widget-recovery">
+            <div class="widget-header">
+                <span class="widget-icon">⚡</span>
+                <span class="widget-title">Muscle Recovery</span>
+                <span class="widget-badge">Today</span>
+            </div>
+            <div class="recovery-body-wrap">
+                <svg viewBox="0 0 100 200" class="recovery-svg">
+                    <!-- Simplified body silhouette with color-coded zones -->
+                    <!-- Head -->
+                    <ellipse cx="50" cy="18" rx="12" ry="14" fill="#e2e8f0" stroke="none"/>
+                    <!-- Neck -->
+                    <rect x="45" y="30" width="10" height="10" rx="3" fill="#e2e8f0"/>
+                    <!-- Shoulders -->
+                    <ellipse cx="28" cy="46" rx="10" ry="7" fill="#10b981" opacity="0.85" class="recovery-zone" data-muscle="Shoulders" data-status="fresh"/>
+                    <ellipse cx="72" cy="46" rx="10" ry="7" fill="#10b981" opacity="0.85" class="recovery-zone" data-muscle="Shoulders" data-status="fresh"/>
+                    <!-- Chest -->
+                    <rect x="36" y="40" width="28" height="22" rx="5" fill="#f59e0b" opacity="0.85" class="recovery-zone" data-muscle="Chest" data-status="recovering"/>
+                    <!-- Arms left -->
+                    <rect x="18" y="52" width="9" height="28" rx="4" fill="#10b981" opacity="0.85" class="recovery-zone" data-muscle="Biceps" data-status="fresh"/>
+                    <!-- Arms right -->
+                    <rect x="73" y="52" width="9" height="28" rx="4" fill="#ef4444" opacity="0.85" class="recovery-zone" data-muscle="Triceps" data-status="fatigued"/>
+                    <!-- Core/Abs -->
+                    <rect x="36" y="64" width="28" height="26" rx="4" fill="#10b981" opacity="0.85" class="recovery-zone" data-muscle="Core" data-status="fresh"/>
+                    <!-- Forearms -->
+                    <rect x="16" y="82" width="9" height="20" rx="4" fill="#10b981" opacity="0.85"/>
+                    <rect x="75" y="82" width="9" height="20" rx="4" fill="#10b981" opacity="0.85"/>
+                    <!-- Legs left quad -->
+                    <rect x="35" y="95" width="12" height="34" rx="5" fill="#ef4444" opacity="0.85" class="recovery-zone" data-muscle="Quads" data-status="fatigued"/>
+                    <!-- Legs right quad -->
+                    <rect x="53" y="95" width="12" height="34" rx="5" fill="#ef4444" opacity="0.85" class="recovery-zone" data-muscle="Hamstrings" data-status="fatigued"/>
+                    <!-- Calves -->
+                    <rect x="36" y="133" width="11" height="26" rx="4" fill="#f59e0b" opacity="0.85" class="recovery-zone" data-muscle="Calves" data-status="recovering"/>
+                    <rect x="53" y="133" width="11" height="26" rx="4" fill="#f59e0b" opacity="0.85" class="recovery-zone" data-muscle="Calves" data-status="recovering"/>
+                    <!-- Feet -->
+                    <ellipse cx="42" cy="162" rx="9" ry="5" fill="#e2e8f0"/>
+                    <ellipse cx="58" cy="162" rx="9" ry="5" fill="#e2e8f0"/>
+                </svg>
+                <div class="recovery-legend">
+                    <div class="rec-leg-item"><span style="background:#10b981"></span>Fresh</div>
+                    <div class="rec-leg-item"><span style="background:#f59e0b"></span>Recovering</div>
+                    <div class="rec-leg-item"><span style="background:#ef4444"></span>Fatigued</div>
+                </div>
+            </div>
+            <div class="recovery-tooltip" id="recoveryTooltip" style="display:none;"></div>
+        </div>
+
+        <!-- 🍽️ Calories In vs Out -->
+        <div class="widget-card widget-calories-balance">
+            <div class="widget-header">
+                <span class="widget-icon">🍽️</span>
+                <span class="widget-title">Calories Balance</span>
+                <span class="widget-badge">Today</span>
+            </div>
+            <div class="calbal-ring-wrap">
+                <svg viewBox="0 0 140 140" class="calbal-svg">
+                    <defs>
+                        <linearGradient id="calInGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#f59e0b"/>
+                            <stop offset="100%" stop-color="#fbbf24"/>
+                        </linearGradient>
+                        <linearGradient id="calOutGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#06b6d4"/>
+                            <stop offset="100%" stop-color="#22d3ee"/>
+                        </linearGradient>
+                    </defs>
+                    <!-- Outer ring: Calories In -->
+                    <circle cx="70" cy="70" r="56" fill="none" stroke="#fef3c7" stroke-width="12"/>
+                    <circle id="calInArc" cx="70" cy="70" r="56" fill="none" stroke="url(#calInGrad)" stroke-width="12"
+                        stroke-linecap="round" stroke-dasharray="0 352" transform="rotate(-90 70 70)"/>
+                    <!-- Inner ring: Calories Out -->
+                    <circle cx="70" cy="70" r="40" fill="none" stroke="#cffafe" stroke-width="10"/>
+                    <circle id="calOutArc" cx="70" cy="70" r="40" fill="none" stroke="url(#calOutGrad)" stroke-width="10"
+                        stroke-linecap="round" stroke-dasharray="0 251" transform="rotate(-90 70 70)"/>
+                    <text x="70" y="65" text-anchor="middle" fill="#0f172a" font-size="13" font-weight="700" font-family="Inter,sans-serif" id="calBalNum">-240</text>
+                    <text x="70" y="79" text-anchor="middle" fill="#94a3b8" font-size="8" font-family="Inter,sans-serif">kcal deficit</text>
+                </svg>
+            </div>
+            <div class="calbal-legend">
+                <div class="calbal-item">
+                    <span class="calbal-dot" style="background:#f59e0b"></span>
+                    <span>Consumed</span>
+                    <strong id="calIn">1,840</strong>
+                </div>
+                <div class="calbal-item">
+                    <span class="calbal-dot" style="background:#06b6d4"></span>
+                    <span>Burned</span>
+                    <strong id="calOut">2,080</strong>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+<!-- ═══ END NEW WIDGETS ═══ -->
 </div>{# end tab-overview #}
 
 <!-- ═══ TAB: POSTURE ═══ -->

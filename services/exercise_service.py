@@ -1,93 +1,351 @@
 """
-Exercise plan generation using Gemini API.
-Builds a personalized weekly workout plan based on user profile + body scan.
+Exercise plan generation — pure rule engine, no Gemini.
+
+Selects exercises from the 270-exercise database using:
+  - Body type (Endo/Meso/Ecto) → sets, reps, rest time, compound priority
+  - Goal (muscle_gain/fat_loss/general_fitness) → rep range, exercise type
+  - Experience level → Beginner / Intermediate / Advanced filter
+  - Equipment → modality filter (FW/C/M)
+  - Target muscles → muscle group priority
+  - Training days/week → split template (PPL, Full Body, Upper/Lower)
 """
 
-from services.gemini_service import generate_json
+import random
+from collections import defaultdict
 
+from services.exercise_data import (
+    EXERCISE_DB, MUSCLE_GROUP_TAGS, TARGET_TO_MUSCLE_GROUPS,
+    EQUIPMENT_MODALITY_MAP, BODYWEIGHT_EXERCISES, get_search_name,
+)
+from services.rule_engine import (
+    BODY_TYPE_EXERCISE_RULES, GOAL_EXERCISE_TWEAKS,
+    WARMUPS, COOLDOWNS, EXERCISE_PLAN_SUMMARIES, WEEKLY_EXERCISE_NOTES,
+    get_split_template, get_allowed_modalities,
+    get_exercise_benefit, get_exercise_tip, get_estimated_duration,
+    get_rest_day_content, _primary_goal,
+)
+
+
+# ─────────────────────────────────────────────
+#  MAIN ENTRY POINT
+# ─────────────────────────────────────────────
 
 def generate_exercise_plan(user_data):
     """
-    Generate a weekly exercise plan.
-    user_data comes from db_service.get_full_user_data().
-    Returns the parsed JSON plan.
+    Generate a 7-day exercise plan using the rule engine.
+    Returns JSON-serialisable dict matching the UI's expected structure.
     """
-    profile = user_data.get("profile", {}) or {}
-    scan = user_data.get("latest_scan", {}) or {}
-    goals = user_data.get("goals", [])
-    muscles = user_data.get("target_muscles", [])
+    profile  = user_data.get("profile", {}) or {}
+    scan     = user_data.get("latest_scan", {}) or {}
+    goals    = user_data.get("goals", []) or []
+    muscles  = user_data.get("target_muscles", []) or []
 
-    body_type = scan.get("body_type", "Unknown")
-    endo = scan.get("endomorphy", 0)
-    meso = scan.get("mesomorphy", 0)
-    ecto = scan.get("ectomorphy", 0)
-    bmi = scan.get("bmi", 0)
-
+    body_type  = scan.get("body_type", "Unknown")
     experience = profile.get("experience_level", "beginner")
-    days = profile.get("training_days_per_week", 4)
-    time_pref = profile.get("preferred_time", "morning")
-    equipment = profile.get("equipment", [])
-    weight = profile.get("weight_kg", 70)
-    height = profile.get("height_cm", 170)
+    training_days = int(profile.get("training_days_per_week", 4))
+    training_days = max(3, min(6, training_days))   # clamp 3–6
+    equipment  = profile.get("equipment", []) or []
 
-    prompt = f"""You are a certified personal trainer and exercise scientist.
-Generate a detailed {days}-day weekly workout plan as JSON.
+    primary_goal  = _primary_goal(goals)
+    bt_rules      = BODY_TYPE_EXERCISE_RULES.get(body_type, BODY_TYPE_EXERCISE_RULES["Unknown"])
+    goal_tweaks   = GOAL_EXERCISE_TWEAKS.get(primary_goal, GOAL_EXERCISE_TWEAKS["general_fitness"])
 
-USER PROFILE:
-- Body type: {body_type} (Endomorphy: {endo:.2f}, Mesomorphy: {meso:.2f}, Ectomorphy: {ecto:.2f})
-- BMI: {bmi}
-- Height: {height} cm, Weight: {weight} kg
-- Goals: {', '.join(goals) if goals else 'general fitness'}
-- Experience level: {experience}
-- Available equipment: {', '.join(equipment) if equipment else 'bodyweight only'}
-- Target muscle groups: {', '.join(muscles) if muscles else 'full body'}
-- Preferred time: {time_pref}
+    # Resolve rep range
+    rep_range = goal_tweaks["rep_range_override"] or bt_rules["rep_range"]
+    # sets
+    sets = bt_rules["sets"] + goal_tweaks["sets_bonus"]
+    # rest
+    rest_seconds = bt_rules["rest_seconds"]
 
-BODY TYPE GUIDELINES:
-- Endomorph (high endo): Focus on higher reps, supersets, include HIIT cardio, compound movements for calorie burn
-- Mesomorph (high meso): Moderate reps, progressive overload, mix of compound and isolation
-- Ectomorph (high ecto): Lower reps, heavier weight, longer rest, compound lifts, minimize cardio
+    # Allowed modalities from equipment
+    allowed_modalities = get_allowed_modalities(equipment)
 
-Return JSON with EXACTLY this structure:
-{{
-  "plan_summary": "Brief 1-2 sentence overview of the plan approach",
-  "weekly_plan": [
-    {{
-      "day": "Monday",
-      "day_number": 1,
-      "is_rest_day": false,
-      "focus": "Push (Chest, Shoulders, Triceps)",
-      "warmup": "5 min light cardio + dynamic stretching",
-      "exercises": [
-        {{
-          "name": "Barbell Bench Press",
-          "search_name": "bench press",
-          "sets": 4,
-          "reps": "8-10",
-          "rest_seconds": 90,
-          "muscle_groups": ["chest", "triceps"],
-          "tips": "Keep shoulder blades retracted, arch slightly in lower back",
-          "benefit_rating": "high",
-          "benefit_reason": "Compound push movement, builds chest mass and overall upper body strength"
-        }}
-      ],
-      "cooldown": "5 min static stretching",
-      "estimated_duration_min": 55
-    }}
-  ],
-  "weekly_notes": "Any additional weekly tips based on body type"
-}}
+    # Experience → allowed levels
+    exp_levels = _get_allowed_levels(experience)
 
-Include ALL 7 days (Mon-Sun). Mark rest days with is_rest_day: true and empty exercises array.
-For rest days, set focus to "Rest & Recovery" and include active recovery suggestions in warmup field.
-Ensure exercises match the available equipment.
-Each training day should have 5-8 exercises.
-For each exercise include:
-- "search_name": a short, common name for searching exercise databases (e.g. "bench press", "squat", "deadlift")
-- "benefit_rating": "high", "medium", or "low" based on how beneficial this exercise is for the user's specific goals and body type
-- "benefit_reason": a brief explanation of why this exercise is beneficial
-"""
+    # Target muscle groups (priority)
+    priority_muscle_groups = _resolve_target_muscles(muscles)
 
-    return generate_json(prompt)
+    # Day split template
+    split_template = get_split_template(training_days)
+
+    # Build exercise pool per split type
+    exercise_pool = _build_exercise_pool(
+        body_type, primary_goal, allowed_modalities, exp_levels,
+        priority_muscle_groups, goal_tweaks
+    )
+
+    # Generate 7-day plan
+    weekly_plan = []
+    for day_num, (day_name, split_type, focus_label) in enumerate(split_template, start=1):
+        if split_type == "rest":
+            weekly_plan.append(_build_rest_day(day_name, day_num, body_type))
+        else:
+            day_exercises = _select_exercises_for_day(
+                split_type, exercise_pool, sets, rep_range, rest_seconds,
+                body_type, goals, experience, training_days
+            )
+            warmup  = WARMUPS.get(split_type, WARMUPS["full_body"])
+            cooldown = COOLDOWNS.get(split_type, COOLDOWNS["full_body"])
+            duration = get_estimated_duration(len(day_exercises), sets, rest_seconds)
+            weekly_plan.append({
+                "day":                   day_name,
+                "day_number":            day_num,
+                "is_rest_day":           False,
+                "focus":                 focus_label,
+                "warmup":                warmup,
+                "exercises":             day_exercises,
+                "cooldown":              cooldown,
+                "estimated_duration_min": duration,
+            })
+
+    # Summary
+    plan_summary = (
+        EXERCISE_PLAN_SUMMARIES
+        .get(body_type, EXERCISE_PLAN_SUMMARIES["Unknown"])
+        .get(primary_goal, EXERCISE_PLAN_SUMMARIES["Unknown"]["general_fitness"])
+    )
+    weekly_notes = WEEKLY_EXERCISE_NOTES.get(body_type, WEEKLY_EXERCISE_NOTES["Unknown"])
+
+    return {
+        "plan_summary": plan_summary,
+        "weekly_plan":  weekly_plan,
+        "weekly_notes": weekly_notes,
+    }
 
 
+# ─────────────────────────────────────────────
+#  INTERNAL HELPERS
+# ─────────────────────────────────────────────
+
+def _get_allowed_levels(experience):
+    """Allow all levels up to and including the user's experience level."""
+    order = ["Beginner", "Intermediate", "Advanced"]
+    exp_map = {"beginner": "Beginner", "intermediate": "Intermediate", "advanced": "Advanced"}
+    target = exp_map.get(experience.lower(), "Beginner")
+    idx = order.index(target)
+    return set(order[:idx + 1])
+
+
+def _resolve_target_muscles(muscles):
+    """Expand target muscle user-tags to actual muscle group names."""
+    if not muscles:
+        return set()
+    resolved = set()
+    for m in muscles:
+        groups = TARGET_TO_MUSCLE_GROUPS.get(m.lower(), [])
+        resolved.update(groups)
+    return resolved
+
+
+def _build_exercise_pool(body_type, primary_goal, allowed_modalities, exp_levels,
+                         priority_muscle_groups, goal_tweaks):
+    """
+    Build a dict: split_type → list of filtered exercises.
+    Exercises are sorted: priority muscles first, compound first for relevant body types.
+    """
+    compound_only = goal_tweaks.get("compound_only", False)
+    isolation_allowed = BODY_TYPE_EXERCISE_RULES.get(
+        body_type, BODY_TYPE_EXERCISE_RULES["Unknown"]
+    )["isolation_allowed"]
+
+    pool = defaultdict(list)
+
+    for ex in EXERCISE_DB:
+        # Level filter
+        if ex["level"] not in exp_levels:
+            continue
+
+        # Equipment / modality filter
+        # FW covers both free weights and bodyweight exercises
+        ex_modality = ex["modality"]
+        if ex_modality not in allowed_modalities:
+            # Special case: if only bodyweight available, allow FW exercises that are bodyweight
+            if "FW" in allowed_modalities and ex["name"] in BODYWEIGHT_EXERCISES:
+                pass  # allow
+            else:
+                continue
+
+        # Compound-only filter for muscle gain goals on Ectomorphs
+        if compound_only and ex["joint_type"] == "S":
+            continue
+        if not isolation_allowed and ex["joint_type"] == "S":
+            continue
+
+        # Determine split category
+        mg_tag = MUSCLE_GROUP_TAGS.get(ex["muscle_group"])
+        if not mg_tag:
+            continue
+        split_cat = mg_tag["split"]  # push / pull / legs / core
+
+        # Score for sorting (higher = better)
+        score = 0
+        if ex["muscle_group"] in priority_muscle_groups:
+            score += 10
+        if ex["joint_type"] == "M":                     # compound
+            score += 3
+        if body_type == "Ectomorph" and ex["joint_type"] == "M":
+            score += 5
+        if ex["level"] == "Intermediate":
+            score += 1
+
+        pool[split_cat].append((score, ex))
+
+    # Sort each split by score descending
+    sorted_pool = {}
+    for split_cat, items in pool.items():
+        items.sort(key=lambda x: x[0], reverse=True)
+        sorted_pool[split_cat] = [ex for _, ex in items]
+
+    # Full body uses all splits
+    sorted_pool["full_body"] = (
+        sorted_pool.get("push", []) +
+        sorted_pool.get("pull", []) +
+        sorted_pool.get("legs", []) +
+        sorted_pool.get("core", [])
+    )
+    return sorted_pool
+
+
+def _select_exercises_for_day(split_type, pool, sets, rep_range, rest_seconds,
+                               body_type, goals, experience, training_days):
+    """
+    Select exercises for a training day.
+
+    Structure:
+      - Main exercises from the day's split (push / pull / legs)
+      - Core finishers appended at the end of EVERY training day
+        Endo: 2 core finishers (metabolic + fat-burn focus)
+        Meso: 2 core finishers (strength + stability)
+        Ecto: 1 core finisher (minimise extra volume)
+    """
+    target_n = _target_exercise_count(split_type, training_days, experience)
+
+    if split_type == "full_body":
+        # full_body already picks from core pool proportionally — no extra finishers needed
+        exercises = _select_from_full_body(pool, target_n, body_type)
+        core_finisher_count = 0
+    else:
+        # How many core finishers to tack on
+        core_finisher_count = _core_finisher_count(body_type)
+        main_n = target_n - core_finisher_count
+
+        candidates = pool.get(split_type, [])
+        _shuffle_equal_score_groups(candidates)
+        exercises = candidates[:main_n]
+
+    # ── Core finishers ──
+    core_exercises = []
+    if core_finisher_count > 0:
+        core_pool = pool.get("core", [])
+        used_main_names = {ex["name"] for ex in exercises}
+        finisher_candidates = [ex for ex in core_pool if ex["name"] not in used_main_names]
+        # Rotate by day seed so different core exercises appear each session
+        random.shuffle(finisher_candidates)
+        core_exercises = finisher_candidates[:core_finisher_count]
+
+    all_exercises = exercises + core_exercises
+
+    # ── Build exercise objects ──
+    result = []
+    for ex in all_exercises:
+        rating, reason = get_exercise_benefit(ex, body_type, goals)
+        tip = get_exercise_tip(ex["muscle_group"], body_type)
+        # Core finishers use lighter sets / higher reps
+        is_core = ex["muscle_group"].startswith("Abdominal")
+        ex_sets = (3 if is_core else sets)
+        ex_reps = ("15-20" if is_core else rep_range)
+        ex_rest = (30 if is_core else rest_seconds)
+        result.append({
+            "name":           ex["name"],
+            "search_name":    get_search_name(ex["name"]),
+            "sets":           ex_sets,
+            "reps":           ex_reps,
+            "rest_seconds":   ex_rest,
+            "muscle_groups":  _format_muscle_groups(ex["muscle_group"]),
+            "tips":           tip,
+            "benefit_rating": rating,
+            "benefit_reason": reason,
+        })
+    return result
+
+
+def _core_finisher_count(body_type):
+    """How many core finisher exercises to append per session by body type."""
+    return {"Endomorph": 2, "Mesomorph": 2, "Ectomorph": 1, "Unknown": 2}.get(body_type, 2)
+
+
+def _select_from_full_body(pool, target_n, body_type):
+    """For full-body days: pick from push, pull, legs, core in proportion."""
+    proportions = {
+        "push": 0.30,
+        "pull": 0.25,
+        "legs": 0.30,
+        "core": 0.15,
+    }
+    selected = []
+    used_names = set()
+    for cat, fraction in proportions.items():
+        n = max(1, round(target_n * fraction))
+        candidates = [ex for ex in pool.get(cat, []) if ex["name"] not in used_names]
+        for ex in candidates[:n]:
+            selected.append(ex)
+            used_names.add(ex["name"])
+    return selected[:target_n]
+
+
+def _target_exercise_count(split_type, training_days, experience):
+    """How many exercises per session."""
+    base = {"push": 6, "pull": 6, "legs": 6, "full_body": 8, "core": 5}
+    n = base.get(split_type, 6)
+    if experience == "beginner":
+        n = max(4, n - 1)
+    elif experience == "advanced":
+        n = min(9, n + 1)
+    return n
+
+
+def _shuffle_equal_score_groups(candidates):
+    """Shuffle within tied-score groups for variety while preserving overall rank."""
+    # The pool is already scored — just add light random noise within top-half
+    mid = len(candidates) // 2
+    if mid > 0:
+        sub = candidates[:mid]
+        random.shuffle(sub)
+        candidates[:mid] = sub
+
+
+def _build_rest_day(day_name, day_num, body_type):
+    return {
+        "day":                   day_name,
+        "day_number":            day_num,
+        "is_rest_day":           True,
+        "focus":                 "Rest & Recovery",
+        "warmup":                get_rest_day_content(body_type),
+        "exercises":             [],
+        "cooldown":              "Full-body static stretching + deep breathing (10 min). Prioritise 7–9 hours sleep tonight.",
+        "estimated_duration_min": 30,
+    }
+
+
+def _format_muscle_groups(muscle_group_str):
+    """Convert muscle group name to a short list."""
+    mapping = {
+        "Chest - Pectoralis":            ["chest"],
+        "Back - Latissimus Dorsi":       ["back", "lats"],
+        "Back - Lat.Dorsi/Rhomboids":    ["back", "rhomboids"],
+        "Shoulders - Delts/Traps":       ["shoulders", "traps"],
+        "Shoulders - Rotator Cuff":      ["shoulders", "rotator cuff"],
+        "Biceps":                        ["biceps"],
+        "Triceps":                       ["triceps"],
+        "Legs - Quadriceps":             ["quads", "glutes"],
+        "Legs - Hamstrings":             ["hamstrings", "glutes"],
+        "Calves - Gastrocnemius":        ["calves"],
+        "Calves - Soleus":               ["calves"],
+        "Abdominals - Upper":            ["abs", "core"],
+        "Abdominals - Lower":            ["lower abs", "core"],
+        "Abdominals - Obliques":         ["obliques", "core"],
+        "Abdominals - Total":            ["core", "abs"],
+        "Lower Back - Erector Spinae":   ["lower back", "erectors"],
+    }
+    return mapping.get(muscle_group_str, [muscle_group_str.lower()])

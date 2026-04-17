@@ -708,13 +708,14 @@
 
 				const child = relationships.children[ i ];
 				const morphTargetNode = deformerNodes[ child.ID ];
+				if ( morphTargetNode === undefined ) continue; // guard: node missing from deformer tree
 				const rawMorphTarget = {
 					name: morphTargetNode.attrName,
 					initialWeight: morphTargetNode.DeformPercent,
 					id: morphTargetNode.id,
 					fullWeights: morphTargetNode.FullWeights.a
 				};
-				if ( morphTargetNode.attrType !== 'BlendShapeChannel' ) return;
+				if ( morphTargetNode.attrType !== 'BlendShapeChannel' ) continue;
 				rawMorphTarget.geoID = connections.get( parseInt( child.ID ) ).children.filter( function ( child ) {
 
 					return child.relationship === undefined;
@@ -1267,7 +1268,9 @@
 							if ( modelMap.has( geoConnParent.ID ) ) {
 
 								const model = modelMap.get( geoConnParent.ID );
-								model.bind( new THREE.Skeleton( skeleton.bones ), bindMatrices[ geoConnParent.ID ] );
+								if ( model.isSkinnedMesh ) {
+									model.bind( new THREE.Skeleton( skeleton.bones ), bindMatrices[ geoConnParent.ID ] );
+								}
 
 							}
 
@@ -2384,9 +2387,12 @@
 
 									const modelID = connections.get( geoID ).parents[ 0 ].ID;
 									const rawModel = fbxTree.Objects.Model[ modelID ];
+								if ( rawModel === undefined ) { console.warn( 'THREE.FBXLoader: Morph model not found, skipping.', modelID ); return; }
+								const _deformerNode = fbxTree.Objects.Deformer[ deformerID ];
+								if ( _deformerNode === undefined ) { console.warn( 'THREE.FBXLoader: Morph deformer not found, skipping.', deformerID ); return; }
 									const node = {
 										modelName: rawModel.attrName ? THREE.PropertyBinding.sanitizeNodeName( rawModel.attrName ) : '',
-										morphName: fbxTree.Objects.Deformer[ deformerID ].attrName
+										morphName: _deformerNode.attrName
 									};
 									layerCurveNodes[ i ] = node;
 

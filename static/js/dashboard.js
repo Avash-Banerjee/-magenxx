@@ -214,3 +214,165 @@ const scan = SCAN_DATA;
         } catch (e) { /* silent */ }
     }, 60000);
 })();
+
+// ── NEW WIDGETS JS ──
+
+// ── ECG Heart Rate Animation ──
+(function initHeartRate() {
+    const svg = document.getElementById('ecgSvg');
+    const line = document.getElementById('ecgLine');
+    if (!svg || !line) return;
+
+    const W = 260, H = 60, mid = H / 2;
+    let offset = 0;
+
+    function ecgPoint(x) {
+        // ECG shape: flat → small bump → spike up → spike down → bump → flat
+        const cycle = W / 2;
+        const pos = ((x + offset) % cycle) / cycle; // 0 to 1
+        if (pos < 0.3) return mid;
+        if (pos < 0.38) return mid - (pos - 0.3) / 0.08 * 6;
+        if (pos < 0.43) return mid + (pos - 0.38) / 0.05 * 6;
+        if (pos < 0.47) return mid - (pos - 0.43) / 0.04 * 36;
+        if (pos < 0.52) return mid + (pos - 0.47) / 0.05 * 18;
+        if (pos < 0.57) return mid - (pos - 0.52) / 0.05 * 8;
+        if (pos < 0.65) return mid + (pos - 0.57) / 0.08 * 8;
+        if (pos < 0.72) return mid - (pos - 0.65) / 0.07 * 8;
+        if (pos < 0.78) return mid + (pos - 0.72) / 0.06 * 8;
+        return mid;
+    }
+
+    function drawECG() {
+        let pts = '';
+        for (let x = 0; x <= W; x += 2) {
+            pts += `${x},${ecgPoint(x).toFixed(1)} `;
+        }
+        line.setAttribute('points', pts.trim());
+        offset = (offset + 1.8) % (W / 2);
+        requestAnimationFrame(drawECG);
+    }
+    drawECG();
+})();
+
+// ── Water Intake ──
+window._waterGlasses = 4;
+function changeWater(delta) {
+    window._waterGlasses = Math.max(0, Math.min(8, window._waterGlasses + delta));
+    const g = window._waterGlasses;
+    document.getElementById('waterGlasses').textContent = g;
+    document.getElementById('waterMl').textContent = (g * 250) + ' ml';
+    // Animate bottle fill
+    const fill = document.getElementById('waterFill');
+    if (fill) {
+        const pct = g / 8;
+        const bottleTop = 35, bottleBottom = 122;
+        const fillHeight = (bottleBottom - bottleTop) * pct;
+        const yPos = bottleBottom - fillHeight;
+        fill.setAttribute('y', yPos);
+        fill.setAttribute('height', fillHeight);
+    }
+}
+// Init bottle fill
+changeWater(0);
+
+// ── SpO2 Arc Animation ──
+(function initSpO2() {
+    const arc = document.getElementById('spo2Arc');
+    if (!arc) return;
+    const totalLen = Math.PI * 50; // half circle r=50
+    const pct = 0.98; // 98%
+    setTimeout(() => {
+        arc.style.transition = 'stroke-dasharray 1.4s cubic-bezier(0.4,0,0.2,1)';
+        arc.style.strokeDasharray = `${totalLen * pct} 999`;
+    }, 600);
+})();
+
+// ── Goal Ring ──
+(function initGoalRing() {
+    const ring = document.getElementById('goalRingFill');
+    if (!ring) return;
+    const pct = 0.38;
+    const circumference = 2 * Math.PI * 48; // r=48
+    setTimeout(() => {
+        ring.style.strokeDasharray = `${circumference * pct} ${circumference}`;
+    }, 700);
+})();
+
+// ── Calories Balance Rings ──
+(function initCalBalance() {
+    const calIn = document.getElementById('calInArc');
+    const calOut = document.getElementById('calOutArc');
+    if (!calIn || !calOut) return;
+    const outerCirc = 2 * Math.PI * 56; // r=56
+    const innerCirc = 2 * Math.PI * 40; // r=40
+    const consumed = 1840, goal = 2500, burned = 2080;
+    const pctIn = Math.min(consumed / goal, 1);
+    const pctOut = Math.min(burned / goal, 1);
+    setTimeout(() => {
+        calIn.style.transition = 'stroke-dasharray 1.4s cubic-bezier(0.4,0,0.2,1)';
+        calOut.style.transition = 'stroke-dasharray 1.4s cubic-bezier(0.4,0,0.2,1)';
+        calIn.style.strokeDasharray = `${outerCirc * pctIn} ${outerCirc}`;
+        calOut.style.strokeDasharray = `${innerCirc * pctOut} ${innerCirc}`;
+    }, 800);
+    const bal = consumed - burned;
+    const balEl = document.getElementById('calBalNum');
+    if (balEl) balEl.textContent = (bal >= 0 ? '+' : '') + bal;
+    document.querySelector('.calbal-svg text:last-of-type').textContent = bal < 0 ? 'kcal deficit' : 'kcal surplus';
+})();
+
+// ── Workout Streak Days ──
+(function initStreak() {
+    const wrap = document.getElementById('streakDays');
+    if (!wrap) return;
+    const days = ['M','T','W','T','F','S','S'];
+    const done = [true, true, true, true, true, true, true]; // last 7 days
+    const today = new Date().getDay(); // 0=Sun
+    days.forEach((d, i) => {
+        const el = document.createElement('div');
+        const isToday = i === 6;
+        el.className = 'streak-day' + (done[i] ? (isToday ? ' today' : ' done') : '');
+        el.textContent = d;
+        wrap.appendChild(el);
+    });
+})();
+
+// ── Activity Heatmap ──
+(function initHeatmap() {
+    const grid = document.getElementById('heatmapGrid');
+    if (!grid) return;
+    const weeks = 12, days = 7;
+    const levels = ['', 'l1', 'l2', 'l3', 'l4'];
+    for (let w = 0; w < weeks; w++) {
+        const col = document.createElement('div');
+        col.className = 'heatmap-col';
+        for (let d = 0; d < days; d++) {
+            const cell = document.createElement('div');
+            // Simulate some activity data
+            const rand = Math.random();
+            let lvl = '';
+            if (rand > 0.35) lvl = rand > 0.7 ? (rand > 0.85 ? (rand > 0.95 ? 'l4' : 'l3') : 'l2') : 'l1';
+            cell.className = 'heatmap-cell ' + lvl;
+            col.appendChild(cell);
+        }
+        grid.appendChild(col);
+    }
+})();
+
+// ── Muscle Recovery Tooltip ──
+(function initRecovery() {
+    const zones = document.querySelectorAll('.recovery-zone');
+    const tooltip = document.getElementById('recoveryTooltip');
+    if (!tooltip) return;
+    zones.forEach(zone => {
+        zone.addEventListener('mouseenter', () => {
+            const muscle = zone.dataset.muscle;
+            const status = zone.dataset.status;
+            const icons = { fresh: '✅', recovering: '⏳', fatigued: '🔴' };
+            tooltip.textContent = `${muscle}: ${status.charAt(0).toUpperCase() + status.slice(1)} ${icons[status] || ''}`;
+            tooltip.style.display = 'block';
+        });
+        zone.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+        });
+    });
+})();

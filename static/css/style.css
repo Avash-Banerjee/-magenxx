@@ -2341,3 +2341,259 @@ h1.left { text-align: left; }
     color: var(--text-muted);
     margin-top: 4px;
 }
+
+/* ════════════════════════════════════════════════
+   NEW DASHBOARD WIDGETS
+   ════════════════════════════════════════════════ */
+
+/* Somatotype Triangle */
+.somatotype-triangle-wrap {
+    padding: 12px 8px 8px;
+    text-align: center;
+}
+.soma-tri-title {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+.soma-tri-label-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+.soma-tri-canvas-wrap { position: relative; }
+.soma-tri-svg { width: 100%; max-width: 200px; }
+.soma-tri-scores {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+.soma-tri-score {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+.soma-tri-score strong { color: var(--text); font-size: 0.85rem; }
+.soma-tri-score .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.soma-tri-score.endo .dot { background: #ef4444; }
+.soma-tri-score.meso .dot { background: #10b981; }
+.soma-tri-score.ecto .dot { background: #8b5cf6; }
+
+/* Widgets Section */
+.widgets-section {
+    padding: 0 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.widgets-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+@media (max-width: 1100px) { .widgets-row { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .widgets-row { grid-template-columns: 1fr; } }
+
+/* Widget Card base */
+.widget-card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: relative;
+    overflow: hidden;
+    transition: transform .2s, box-shadow .2s;
+}
+.widget-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+}
+.widget-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.widget-icon { font-size: 1rem; }
+.widget-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text);
+    flex: 1;
+}
+.widget-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: .05em;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: #f1f5f9;
+    color: #64748b;
+    text-transform: uppercase;
+}
+.widget-badge.live { background: #fee2e2; color: #dc2626; animation: blink 1.4s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+.widget-footer {
+    font-size: 0.65rem;
+    color: var(--text-dim, #94a3b8);
+    margin-top: auto;
+}
+
+/* ── Heart Rate ── */
+.heart-bpm-wrap { display: flex; align-items: baseline; gap: 4px; }
+.heart-bpm-num { font-size: 2.4rem; font-weight: 800; color: #ef4444; line-height: 1; }
+.heart-bpm-unit { font-size: 0.75rem; color: #94a3b8; font-weight: 600; }
+.heart-status {
+    font-size: 0.72rem; font-weight: 700; padding: 2px 10px;
+    border-radius: 20px; width: fit-content;
+}
+.heart-status.normal { background: #dcfce7; color: #15803d; }
+.heart-status.elevated { background: #fef9c3; color: #a16207; }
+.heart-status.high { background: #fee2e2; color: #dc2626; }
+.ecg-svg {
+    width: 100%; height: 52px;
+    background: linear-gradient(180deg, #fff5f5 0%, #fff 100%);
+    border-radius: 10px;
+}
+
+/* ── Water Intake ── */
+.water-bottle-wrap { display: flex; align-items: center; gap: 14px; }
+.water-bottle-svg { width: 64px; flex-shrink: 0; }
+.water-info { flex: 1; }
+.water-glasses { font-size: 2rem; font-weight: 800; color: #0284c7; line-height: 1; display: flex; align-items: baseline; gap: 2px; }
+.water-total { font-size: 1rem; color: #94a3b8; font-weight: 600; }
+.water-glasses-label { font-size: 0.68rem; color: #94a3b8; margin-bottom: 4px; }
+.water-ml { font-size: 0.75rem; font-weight: 600; color: #0284c7; margin-bottom: 8px; }
+.water-btns { display: flex; gap: 6px; }
+.water-btn {
+    width: 28px; height: 28px; border-radius: 50%; border: 2px solid #bae6fd;
+    background: #f0f9ff; color: #0284c7; font-size: 1.1rem; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+}
+.water-btn:hover { background: #0284c7; color: #fff; border-color: #0284c7; }
+
+/* ── SpO2 ── */
+.spo2-gauge-wrap { position: relative; }
+.spo2-svg { width: 100%; max-width: 140px; margin: 0 auto; display: block; }
+.spo2-value-wrap {
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    text-align: center; pointer-events: none;
+}
+.spo2-num { font-size: 2rem; font-weight: 800; color: #0f172a; }
+.spo2-pct { font-size: 0.9rem; color: #94a3b8; font-weight: 600; }
+.spo2-status {
+    text-align: center; font-size: 0.75rem; font-weight: 700;
+    color: #15803d; background: #dcfce7; padding: 3px 12px;
+    border-radius: 20px; width: fit-content; margin: 0 auto;
+}
+
+/* ── Stress Level ── */
+.stress-dots-wrap { display: flex; gap: 8px; align-items: center; }
+.stress-dot {
+    width: 18px; height: 18px; border-radius: 50%; background: #e5e7eb;
+    transition: all .3s; cursor: default;
+}
+.stress-dot.active.green { background: #10b981; box-shadow: 0 0 8px rgba(16,185,129,.4); }
+.stress-dot.active.yellow { background: #f59e0b; box-shadow: 0 0 8px rgba(245,158,11,.4); }
+.stress-dot.active.red { background: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,.4); }
+.stress-label { font-size: 1.4rem; font-weight: 800; color: #10b981; }
+.stress-desc { font-size: 0.7rem; color: #64748b; }
+.stress-meter-wrap { display: flex; flex-direction: column; gap: 4px; }
+.stress-meter-track { height: 6px; background: #f1f5f9; border-radius: 99px; overflow: hidden; }
+.stress-meter-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444); transition: width 1s ease; }
+.stress-meter-labels { display: flex; justify-content: space-between; font-size: 0.6rem; color: #94a3b8; }
+
+/* ── Workout Streak ── */
+.streak-main { display: flex; align-items: baseline; gap: 6px; }
+.streak-fire { font-size: 1.8rem; }
+.streak-count { font-size: 2.8rem; font-weight: 900; color: #f97316; line-height: 1; }
+.streak-unit { font-size: 0.8rem; color: #94a3b8; font-weight: 600; }
+.streak-best { font-size: 0.72rem; color: #64748b; }
+.streak-best strong { color: #f97316; }
+.streak-days-wrap { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.streak-day {
+    width: 22px; height: 22px; border-radius: 6px; background: #f1f5f9;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.55rem; font-weight: 700; color: #94a3b8;
+}
+.streak-day.done { background: #f97316; color: #fff; }
+.streak-day.today { background: #ea580c; color: #fff; box-shadow: 0 0 8px rgba(249,115,22,.5); }
+
+/* ── Heatmap ── */
+.widget-heatmap { padding: 16px; }
+.heatmap-wrap {
+    display: flex; gap: 3px; overflow-x: auto;
+    padding-bottom: 4px;
+}
+.heatmap-col { display: flex; flex-direction: column; gap: 3px; }
+.heatmap-cell {
+    width: 14px; height: 14px; border-radius: 3px;
+    background: #f1f5f9;
+    transition: transform .1s;
+    cursor: default;
+}
+.heatmap-cell:hover { transform: scale(1.3); }
+.heatmap-cell.l1 { background: #bae6fd; }
+.heatmap-cell.l2 { background: #38bdf8; }
+.heatmap-cell.l3 { background: #0284c7; }
+.heatmap-cell.l4 { background: #0c4a6e; }
+.heatmap-legend {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.65rem; color: #94a3b8; margin-top: 8px;
+}
+.heatmap-legend-cells { display: flex; gap: 3px; }
+.heatmap-legend-cells div { width: 12px; height: 12px; border-radius: 2px; }
+
+/* ── Goal Ring ── */
+.goal-ring-wrap { display: flex; justify-content: center; }
+.goal-ring-svg { width: 110px; height: 110px; }
+.goal-label { font-size: 0.82rem; font-weight: 700; color: var(--text); text-align: center; }
+.goal-sub { font-size: 0.68rem; color: #64748b; text-align: center; }
+
+/* ── Personal Records ── */
+.records-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.record-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: 12px; background: #f8fafc;
+    border: 1px solid #f1f5f9;
+}
+.record-icon { font-size: 1.3rem; }
+.record-info { flex: 1; }
+.record-name { font-size: 0.7rem; color: #64748b; font-weight: 600; }
+.record-val { font-size: 1rem; font-weight: 800; color: #0f172a; }
+.record-badge { font-size: 0.55rem; font-weight: 800; padding: 2px 6px; border-radius: 8px; }
+.record-badge.new { background: #fef3c7; color: #b45309; }
+
+/* ── Muscle Recovery ── */
+.recovery-body-wrap { display: flex; align-items: flex-start; gap: 14px; }
+.recovery-svg { width: 80px; flex-shrink: 0; cursor: pointer; }
+.recovery-zone { transition: opacity .2s; cursor: pointer; }
+.recovery-zone:hover { opacity: 1 !important; stroke: #0f172a; stroke-width: 1; }
+.recovery-legend { display: flex; flex-direction: column; gap: 7px; margin-top: 8px; }
+.rec-leg-item { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: #64748b; }
+.rec-leg-item span { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.recovery-tooltip {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: #0f172a; color: #fff; font-size: 0.7rem; padding: 5px 12px;
+    border-radius: 8px; white-space: nowrap; pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+/* ── Calories Balance ── */
+.calbal-ring-wrap { display: flex; justify-content: center; }
+.calbal-svg { width: 130px; height: 130px; }
+.calbal-legend { display: flex; flex-direction: column; gap: 6px; }
+.calbal-item { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: #64748b; }
+.calbal-item strong { margin-left: auto; color: #0f172a; font-size: 0.85rem; }
+.calbal-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
