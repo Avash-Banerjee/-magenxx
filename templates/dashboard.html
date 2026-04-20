@@ -27,6 +27,10 @@
                 <span class="icon">&#x1F957;</span>
                 <span>Diet</span>
             </a>
+            <a href="/settings" class="sidebar-link">
+                <span class="icon">&#x2699;</span>
+                <span>Settings</span>
+            </a>
         </nav>
         <div class="sidebar-footer">
             <a href="/logout" class="sidebar-signout">Sign Out</a>
@@ -49,9 +53,8 @@
                     <div class="header-badge-sub">Soft Off-White</div>
                 </div>
                 <div class="header-actions">
-                    <button class="header-icon-btn">&#x1F50D;</button>
-                    <button class="header-icon-btn">&#x1F514;</button>
-                    <button class="header-icon-btn">&#x2699;</button>
+                    <button class="header-icon-btn dark-mode-btn" id="darkModeToggle" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
+                    <a href="/settings" class="header-icon-btn" title="Settings" style="text-decoration:none; display:flex; align-items:center; justify-content:center;">⚙️</a>
                     <div class="header-user">
                         <div class="header-avatar">{{ session.get('user_name', 'U')[:2] | upper }}</div>
                         <div>
@@ -130,6 +133,9 @@
 <!-- ═══ TAB: OVERVIEW ═══ -->
 <div class="tab-panel active" id="tab-overview">
 
+<!-- Today's Focus Widget -->
+<div id="todaysFocusContainer"></div>
+
 <!-- ═══ DASHBOARD GRID (3-column layout) ═══ -->
 <div class="dashboard-grid">
 
@@ -140,6 +146,8 @@
         <div class="scan-panel">
             <h3>3D SCAN</h3>
             <a href="/scan" class="scan-start-btn">SCAN START</a>
+            <button class="pdf-export-btn" style="width:100%; margin-top:8px; font-size:0.78rem;"
+                    onclick="exportScanPDF()">📊 Download Scan Report</button>
             <p class="scan-remaining">
                 {% if scan.scanned_at %}
                 Last: {{ scan.scanned_at[:10] }}
@@ -525,93 +533,6 @@
             <p style="text-align:center; color:var(--text-dim); font-size:0.72rem; margin-top:12px;">
                 Click on any muscle group to view detailed scan data
             </p>
-        </div>
-
-        <!-- Bottom Grid: Composition + Progression -->
-        <div class="bottom-grid">
-            <!-- Body Composition -->
-            <div class="composition-card">
-                <h4>Body Composition</h4>
-                <div class="composition-item">
-                    <span class="name">Muscle Mass</span>
-                    <div>
-                        <span class="val">{{ "%.1f"|format(scan.mesomorphy or 0) }}</span>
-                        <span class="unit">score</span>
-                    </div>
-                </div>
-                <div class="composition-item">
-                    <span class="name">Body Fat</span>
-                    <div>
-                        <span class="val">{{ "%.1f"|format(scan.endomorphy or 0) }}</span>
-                        <span class="unit">score</span>
-                    </div>
-                </div>
-                <div class="composition-item">
-                    <span class="name">Ectomorphy</span>
-                    <div>
-                        <span class="val">{{ "%.1f"|format(scan.ectomorphy or 0) }}</span>
-                        <span class="unit">score</span>
-                    </div>
-                </div>
-                {% if scan.bmi %}
-                <div class="composition-item">
-                    <span class="name">BMI</span>
-                    <div>
-                        <span class="val">{{ "%.1f"|format(scan.bmi) }}</span>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-
-            <!-- Body Progression -->
-            <div class="progression-card">
-                <h4>Body Progression</h4>
-                {% set meso_pct = ((scan.mesomorphy or 0) / 7 * 100) | int %}
-                {% set endo_pct = ((scan.endomorphy or 0) / 7 * 100) | int %}
-                {% set ecto_pct = ((scan.ectomorphy or 0) / 7 * 100) | int %}
-                <div class="progression-item">
-                    <div class="label-row">
-                        <span class="name">Muscle Mass</span>
-                    </div>
-                    <div class="progression-bar">
-                        <div class="fill cyan" style="width:{{ [meso_pct, 95] | min }}%"></div>
-                    </div>
-                </div>
-                <div class="progression-item">
-                    <div class="label-row">
-                        <span class="name">Strength</span>
-                    </div>
-                    <div class="progression-bar">
-                        <div class="fill green" style="width:{{ [((meso_pct + endo_pct) / 2) | int, 95] | min }}%"></div>
-                    </div>
-                </div>
-                <div class="progression-item">
-                    <div class="label-row">
-                        <span class="name">Endurance</span>
-                    </div>
-                    <div class="progression-bar">
-                        <div class="fill amber" style="width:{{ [ecto_pct, 95] | min }}%"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Charts Row -->
-        <div class="results-grid" style="margin-top:16px;">
-            <div class="card">
-                <h2>Somatotype Components</h2>
-                <div id="chartComponents" class="chart-container"></div>
-            </div>
-            <div class="card">
-                <h2>Body Symmetry</h2>
-                <div id="chartSymmetry" class="chart-container"></div>
-            </div>
-        </div>
-
-        <!-- Body Proportions Chart -->
-        <div class="card" style="margin-top:16px;">
-            <h2>Body Proportions</h2>
-            <div id="chartProportions" class="chart-container"></div>
         </div>
 
         <!-- Target Muscles -->
@@ -1183,73 +1104,31 @@
 
     <!-- HMR Body Circumferences -->
     {% if m_cm %}
+    {% set estimated_fields = hmr.get('estimated_fields', []) %}
     <div class="measurement-group">
         <h4 class="measurement-group-title">Body Circumferences <span class="measurement-source">HMR Estimation</span></h4>
         <div class="measurements-grid">
-            {% if m_cm.get('chest') %}
+            {% for key, label in [
+                ('chest','Chest'), ('waist','Waist'), ('hip','Hip'),
+                ('shoulder','Shoulder Width'), ('upper_arm','Upper Arm (Bicep)'),
+                ('thigh','Thigh'), ('belly','Belly'), ('inseam','Inseam'),
+                ('neck','Neck'), ('forearm','Forearm'), ('calf','Calf'),
+                ('wrist','Wrist'), ('ankle','Ankle')
+            ] %}
+            {% if m_cm.get(key) %}
             <div class="measurement-item">
                 <div class="measurement-info">
-                    <span class="measurement-label">Chest</span>
-                    <span class="measurement-value">{{ "%.1f"|format(m_cm.chest) }} <small>cm</small></span>
+                    <span class="measurement-label">
+                        {{ label }}
+                        {% if key in estimated_fields %}
+                        <span class="measurement-est-tag">Est.</span>
+                        {% endif %}
+                    </span>
+                    <span class="measurement-value">{{ "%.1f"|format(m_cm[key]) }} <small>cm</small></span>
                 </div>
             </div>
             {% endif %}
-            {% if m_cm.get('waist') %}
-            <div class="measurement-item">
-                <div class="measurement-info">
-                    <span class="measurement-label">Waist</span>
-                    <span class="measurement-value">{{ "%.1f"|format(m_cm.waist) }} <small>cm</small></span>
-                </div>
-            </div>
-            {% endif %}
-            {% if m_cm.get('hip') %}
-            <div class="measurement-item">
-                <div class="measurement-info">
-                    <span class="measurement-label">Hip</span>
-                    <span class="measurement-value">{{ "%.1f"|format(m_cm.hip) }} <small>cm</small></span>
-                </div>
-            </div>
-            {% endif %}
-            {% if m_cm.get('shoulder') %}
-            <div class="measurement-item">
-                <div class="measurement-info">
-                    <span class="measurement-label">Shoulder Width</span>
-                    <span class="measurement-value">{{ "%.1f"|format(m_cm.shoulder) }} <small>cm</small></span>
-                </div>
-            </div>
-            {% endif %}
-            {% if m_cm.get('upper_arm') %}
-            <div class="measurement-item">
-                <div class="measurement-info">
-                    <span class="measurement-label">Upper Arm</span>
-                    <span class="measurement-value">{{ "%.1f"|format(m_cm.upper_arm) }} <small>cm</small></span>
-                </div>
-            </div>
-            {% endif %}
-            {% if m_cm.get('thigh') %}
-            <div class="measurement-item">
-                <div class="measurement-info">
-                    <span class="measurement-label">Thigh</span>
-                    <span class="measurement-value">{{ "%.1f"|format(m_cm.thigh) }} <small>cm</small></span>
-                </div>
-            </div>
-            {% endif %}
-            {% if m_cm.get('belly') %}
-            <div class="measurement-item">
-                <div class="measurement-info">
-                    <span class="measurement-label">Belly</span>
-                    <span class="measurement-value">{{ "%.1f"|format(m_cm.belly) }} <small>cm</small></span>
-                </div>
-            </div>
-            {% endif %}
-            {% if m_cm.get('inseam') %}
-            <div class="measurement-item">
-                <div class="measurement-info">
-                    <span class="measurement-label">Inseam</span>
-                    <span class="measurement-value">{{ "%.1f"|format(m_cm.inseam) }} <small>cm</small></span>
-                </div>
-            </div>
-            {% endif %}
+            {% endfor %}
         </div>
     </div>
     {% endif %}
@@ -1406,14 +1285,22 @@
 </div>
 {% endblock %}
 
+{% block head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+{% endblock %}
+
 {% block scripts %}
 {% if data and data.latest_scan %}
 <script>
-    const SCAN_DATA = {{ data.latest_scan | tojson }};
+    const SCAN_DATA    = {{ data.latest_scan | tojson }};
+    const PROFILE_DATA = {{ (data.profile or {}) | tojson }};
     const TARGET_MUSCLES = {{ data.target_muscles | tojson }};
+    const GOALS_DATA   = {{ (data.goals or []) | tojson }};
+    const USER_NAME    = {{ session.get('user_name', 'User') | tojson }};
 </script>
 <script src="/static/js/body-hotspots.js"></script>
 <script src="/static/js/dashboard.js"></script>
+<script src="/static/js/pdf-export.js"></script>
 
 <!-- Tab Switching -->
 <script>

@@ -198,6 +198,10 @@ def api_auth_login():
     profile = db.get_profile(user["id"])
     redirect_url = "/dashboard" if profile else "/onboarding"
 
+    # Store preferred_time in session so base.html can emit the meta tag
+    if profile:
+        session["preferred_time"] = profile.get("preferred_time") or ""
+
     return jsonify({"success": True, "redirect": redirect_url})
 
 
@@ -271,6 +275,44 @@ def api_analyze_pose():
     return jsonify(result)
 
 
+def _enrich_measurements(data):
+    """Estimate additional circumferences from existing HMR measurements + height."""
+    hmr = data.get("hmr_data") or {}
+    m = hmr.get("measurements_cm") or {}
+    profile = db.get_profile(session.get("user_id")) or {}
+    height_cm = float(profile.get("height_cm") or data.get("height_cm") or 0)
+
+    added = {}
+
+    # Neck: ~37% of chest circumference (Behnke anthropometric reference)
+    if "chest" in m and "neck" not in m:
+        added["neck"] = round(m["chest"] * 0.37, 1)
+
+    # Forearm: ~75% of upper arm circumference
+    if "upper_arm" in m and "forearm" not in m:
+        added["forearm"] = round(m["upper_arm"] * 0.75, 1)
+
+    # Calf: ~66% of thigh circumference
+    if "thigh" in m and "calf" not in m:
+        added["calf"] = round(m["thigh"] * 0.66, 1)
+
+    # Wrist: Martin formula — 17.5% of height
+    if height_cm and "wrist" not in m:
+        added["wrist"] = round(height_cm * 0.175, 1)
+
+    # Ankle: ~21% of height
+    if height_cm and "ankle" not in m:
+        added["ankle"] = round(height_cm * 0.21, 1)
+
+    if added:
+        m.update(added)
+        hmr["measurements_cm"] = m
+        hmr.setdefault("estimated_fields", []).extend(added.keys())
+        data["hmr_data"] = hmr
+
+    return data
+
+
 @app.route("/api/scan/save", methods=["POST"])
 def api_save_scan():
     """Save scan results to database."""
@@ -278,6 +320,7 @@ def api_save_scan():
         return jsonify({"error": "Not logged in"}), 401
 
     data = request.get_json()
+    data = _enrich_measurements(data)
     scan_id = db.save_scan_result(session["user_id"], data)
     return jsonify({"success": True, "scan_id": scan_id})
 
@@ -528,6 +571,234 @@ def api_current_user():
     if not data:
         return jsonify({"error": "User not found"}), 404
     return jsonify(data)
+
+
+# ═══════════════════════════════════════════
+#  EXERCISE SET LOGS API
+# ═══════════════════════════════════════════
+
+@app.route("/api/exercise/log-set", methods=["POST"])
+def api_log_exercise_set():
+    """Log weight + reps for a specific set of an exercise."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not logged in"}), 401
+    data = request.get_json()
+    db.log_exercise_set(
+        session["user_id"],
+        data["plan_id"],
+        data["day_name"],
+        data["exercise_name"],
+        data["set_number"],
+        data.get("weight_kg"),
+        data.get("reps_done"),
+        data.get("notes", ""),
+    )
+    return jsonify({"success": True})
+
+
+@app.route("/api/exercise/set-logs/<int:plan_id>")
+def api_get_set_logs(plan_id):
+    """Get all set logs for a plan."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not logged in"}), 401
+    logs = db.get_set_logs(session["user_id"], plan_id)
+    return jsonify(logs)
+
+
+# ═══════════════════════════════════════════
+#  MEAL LOGS API
+# ═══════════════════════════════════════════
+
+@app.route("/api/diet/log-meal", methods=["POST"])
+def api_log_meal():
+    """Log a meal as eaten / not eaten."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not logged in"}), 401
+    data = request.get_json()
+    db.log_meal(
+        session["user_id"],
+        data["plan_id"],
+        data["day_name"],
+        data["meal_name"],
+        data.get("completed", True),
+    )
+    return jsonify({"success": True})
+
+
+@app.route("/api/diet/meal-logs/<int:plan_id>")
+def api_get_meal_logs(plan_id):
+    """Get all meal logs for a plan."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not logged in"}), 401
+    logs = db.get_meal_logs(session["user_id"], plan_id)
+    return jsonify(logs)
+
+
+# ═══════════════════════════════════════════
+#  WATER TRACKING API
+# ═══════════════════════════════════════════
+
+@app.route("/api/water/update", methods=["POST"])
+def api_update_water():
+    """Set today's water glass count."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not logged in"}), 401
+    data = request.get_json()
+    glasses = db.update_water(session["user_id"], data.get("glasses", 0))
+    return jsonify({"success": True, "glasses": glasses})
+
+
+@app.route("/api/water/today")
+def api_water_today():
+    """Get today's water glass count."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not logged in"}), 401
+    glasses = db.get_water_today(session["user_id"])
+    return jsonify({"glasses": glasses})
+
+
+# ═══════════════════════════════════════════
+#  STREAK + PROGRESS HISTORY API
+# ═══════════════════════════════════════════
+
+@app.route("/api/progress/streak")
+def api_streak():
+    """Return current streak, best streak, and last 7 days status."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not logged in"}), 401
+    data = db.get_streak_data(session["user_id"])
+    return jsonify(data)
+
+
+@app.route("/api/progress/history")
+def api_progress_history():
+    """Return all scans for history/comparison charts."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not logged in"}), 401
+    scans = db.get_scan_history(session["user_id"])
+    return jsonify(scans)
+
+
+# ═══════════════════════════════════════════
+#  EXERCISE SWAP API
+# ═══════════════════════════════════════════
+
+@app.route("/api/exercise/swap")
+def api_swap_exercise():
+    """Find the next best exercise for the given split, excluding the current one."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not logged in"}), 401
+
+    day_name  = request.args.get("day_name", "")
+    ex_name   = request.args.get("exercise_name", "")
+    split_cat = request.args.get("split_cat", "push")
+
+    user_data  = db.get_full_user_data(session["user_id"])
+    body_type  = (user_data.get("latest_scan") or {}).get("body_type", "Unknown")
+    goals      = user_data.get("goals", [])
+    profile    = user_data.get("profile") or {}
+    equipment  = profile.get("equipment", [])
+    experience = profile.get("experience_level", "beginner")
+    gender     = profile.get("gender") or "male"
+
+    plan = db.get_latest_exercise_plan(session["user_id"])
+    exclude = set()
+    if plan and plan.get("plan_data"):
+        for day in plan["plan_data"].get("weekly_plan", []):
+            if day.get("day", "").lower() == day_name.lower():
+                for ex in day.get("exercises", []):
+                    exclude.add(ex["name"])
+                break
+    exclude.add(ex_name)
+
+    result = db.get_next_exercise_for_swap(body_type, split_cat, exclude, goals, equipment, experience, gender)
+    if not result:
+        return jsonify({"error": "No suitable replacement found"}), 404
+
+    from services.rule_engine import (get_exercise_benefit, get_exercise_tip,
+                                      BODY_TYPE_EXERCISE_RULES, GENDER_EXERCISE_ADJUSTMENTS)
+    from services.exercise_data import get_search_name
+    bt_rules   = BODY_TYPE_EXERCISE_RULES.get(body_type, BODY_TYPE_EXERCISE_RULES["Unknown"])
+    gender_key = "female" if str(gender).lower() in ("female", "f") else "male"
+    gender_adj = GENDER_EXERCISE_ADJUSTMENTS[gender_key]
+    rating, reason = get_exercise_benefit(result, body_type, goals)
+    tip = get_exercise_tip(result["muscle_group"], body_type)
+
+    # Apply gender rep-range offset to the swapped exercise
+    rep_range = bt_rules["rep_range"]
+    offset = gender_adj.get("rep_range_offset", 0)
+    if offset:
+        low, high = (int(x) for x in rep_range.split("-"))
+        rep_range = f"{low + offset}-{high + offset}"
+
+    rest_seconds = bt_rules["rest_seconds"]
+    if gender_key == "female":
+        rest_seconds = max(30, rest_seconds - 15)
+
+    return jsonify({
+        "name": result["name"],
+        "search_name": get_search_name(result["name"]),
+        "muscle_group": result["muscle_group"],
+        "joint_type": result["joint_type"],
+        "sets": bt_rules["sets"],
+        "reps": rep_range,
+        "rest_seconds": rest_seconds,
+        "benefit_rating": rating,
+        "benefit_reason": reason,
+        "tips": tip,
+        "muscle_groups": [result["muscle_group"].lower().split(" - ")[-1]],
+    })
+
+
+# ═══════════════════════════════════════════
+#  SETTINGS PAGE + PROFILE UPDATE API
+# ═══════════════════════════════════════════
+
+@app.route("/settings")
+def settings_page():
+    if not session.get("user_id"):
+        return redirect(url_for("login_page"))
+    user_data = db.get_full_user_data(session["user_id"])
+    return render_template("settings.html", active_page="settings", data=user_data)
+
+
+@app.route("/api/profile/update", methods=["POST"])
+def api_update_profile():
+    """Update user profile fields from settings page."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not logged in"}), 401
+    data = request.get_json()
+    uid = session["user_id"]
+
+    new_name = (data.get("name") or "").strip()
+    if new_name:
+        conn = db.get_db()
+        conn.execute("UPDATE users SET name=? WHERE id=?", (new_name, uid))
+        conn.commit()
+        conn.close()
+        session["user_name"] = new_name
+
+    db.save_profile(uid, {
+        "age": data.get("age"),
+        "gender": data.get("gender"),
+        "height_cm": data.get("height_cm"),
+        "weight_kg": data.get("weight_kg"),
+        "experience_level": data.get("experience_level"),
+        "training_days_per_week": data.get("training_days_per_week"),
+        "preferred_time": data.get("preferred_time"),
+        "equipment": data.get("equipment", []),
+        "target_weight": data.get("target_weight"),
+        "minutes_per_session": data.get("minutes_per_session"),
+    })
+    db.save_goals(uid, data.get("goals", []))
+    db.save_target_muscles(uid, data.get("target_muscles", []))
+    db.save_diet_preferences(uid, data.get("diet_type", "non_veg"), data.get("indianize", False))
+
+    # Keep session in sync so base.html reminder banner uses latest value
+    if data.get("preferred_time"):
+        session["preferred_time"] = data.get("preferred_time")
+
+    return jsonify({"success": True, "message": "Profile updated successfully"})
 
 
 # ═══════════════════════════════════════════

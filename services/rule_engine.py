@@ -66,7 +66,41 @@ GOAL_MACRO_TWEAKS = {
     "general_fitness": {"carbs_pct": 0, "protein_pct": 0, "fats_pct": 0},
 }
 
-def get_macro_targets(daily_calories, body_type, goals, weight_kg):
+# Gender-based macro adjustments (applied after goal tweaks).
+# Research basis: females oxidise proportionally more fat during aerobic exercise
+# (Tarnopolsky 2000, Venables 2005) → slightly lower carb %, higher healthy fat %.
+# Absolute protein need is similar per kg, so protein % stays the same.
+GENDER_MACRO_TWEAKS = {
+    "female": {"carbs_pct": -3, "protein_pct": 0, "fats_pct": +3},
+    "male":   {"carbs_pct":  0, "protein_pct": 0, "fats_pct":  0},
+}
+
+# Gender-based exercise adjustments
+# Research basis: females have more slow-twitch muscle fibre proportion → respond
+# better to higher rep ranges; recover faster between sets; benefit from extra
+# core/glute work for pelvic stability (Staron 2000, Hunter 2004).
+GENDER_EXERCISE_ADJUSTMENTS = {
+    "female": {
+        "rep_range_offset":           3,     # add to both ends: "8-12" → "11-15"
+        "core_finisher_bonus":        1,     # +1 core exercise per session
+        "isolation_allowed_override": True,  # allow isolation even for Ectomorph
+        "priority_muscle_bonus":      4,     # extra score for glute/lower-body muscles
+        "priority_muscles": {
+            "Legs - Quadriceps", "Legs - Hamstrings",
+            "Abdominals - Total", "Abdominals - Lower", "Abdominals - Obliques",
+        },
+    },
+    "male": {
+        "rep_range_offset":           0,
+        "core_finisher_bonus":        0,
+        "isolation_allowed_override": None,  # respect body-type default
+        "priority_muscle_bonus":      0,
+        "priority_muscles":           set(),
+    },
+}
+
+
+def get_macro_targets(daily_calories, body_type, goals, weight_kg, gender="male"):
     ratios = MACRO_RATIOS.get(body_type, MACRO_RATIOS["Unknown"]).copy()
 
     # Apply goal tweaks
@@ -75,6 +109,13 @@ def get_macro_targets(daily_calories, body_type, goals, weight_kg):
     ratios["carbs_pct"]   = max(20, min(60, ratios["carbs_pct"]   + tweaks["carbs_pct"]))
     ratios["protein_pct"] = max(20, min(50, ratios["protein_pct"] + tweaks["protein_pct"]))
     ratios["fats_pct"]    = max(15, min(40, ratios["fats_pct"]    + tweaks["fats_pct"]))
+
+    # Apply gender tweaks
+    gender_key = "female" if str(gender).lower() in ("female", "f") else "male"
+    g_tweaks = GENDER_MACRO_TWEAKS[gender_key]
+    ratios["carbs_pct"]   = max(20, min(60, ratios["carbs_pct"]   + g_tweaks["carbs_pct"]))
+    ratios["protein_pct"] = max(20, min(50, ratios["protein_pct"] + g_tweaks["protein_pct"]))
+    ratios["fats_pct"]    = max(15, min(40, ratios["fats_pct"]    + g_tweaks["fats_pct"]))
 
     # Normalise to 100%
     total = ratios["carbs_pct"] + ratios["protein_pct"] + ratios["fats_pct"]

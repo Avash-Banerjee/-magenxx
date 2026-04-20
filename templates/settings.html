@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block title %}FitScan — Settings{% endblock %}
+
+{% block body_layout %}
+<div class="app-layout">
+    <aside class="sidebar">
+        <a href="/" class="sidebar-brand">
+            <div class="sidebar-brand-icon">F</div>
+            <span class="sidebar-brand-text">FitScan</span>
+        </a>
+        <nav class="sidebar-nav">
+            <a href="/dashboard" class="sidebar-link">
+                <span class="icon">&#x1F4CA;</span><span>Dashboard</span>
+            </a>
+            <a href="/scan" class="sidebar-link">
+                <span class="icon">&#x1F4F7;</span><span>Body Scan</span>
+            </a>
+            <a href="/exercise" class="sidebar-link">
+                <span class="icon">&#x1F3CB;</span><span>Exercise</span>
+            </a>
+            <a href="/diet" class="sidebar-link">
+                <span class="icon">&#x1F957;</span><span>Diet</span>
+            </a>
+            <a href="/settings" class="sidebar-link active">
+                <span class="icon">&#x2699;</span><span>Settings</span>
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout" class="sidebar-signout">Sign Out</a>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div class="top-header">
+            <div class="top-header-row">
+                <div class="top-nav">
+                    <a href="/dashboard" class="top-nav-link">Dashboard</a>
+                    <a href="/settings" class="top-nav-link active">Settings</a>
+                </div>
+                <div class="header-actions">
+                    <button class="header-icon-btn" id="darkModeToggle" title="Toggle dark mode" onclick="toggleDarkMode()">🌙</button>
+                    <div class="header-user">
+                        <div class="header-avatar">{{ session.get('user_name', 'U')[:2] | upper }}</div>
+                        <div>
+                            <div class="header-user-name">{{ session.get('user_name', 'Guest') }}</div>
+                            <span class="header-user-badge">PRO</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% set profile = data.profile or {} %}
+        {% set goals = data.goals or [] %}
+        {% set muscles = data.target_muscles or [] %}
+        {% set diet = data.diet_preferences or {} %}
+
+        <div style="max-width:860px; margin:0 auto; padding:24px 0;">
+
+            <!-- Save Banner -->
+            <div id="saveBanner" style="display:none; background:var(--green); color:white; padding:12px 20px; border-radius:12px; margin-bottom:20px; font-weight:600; text-align:center;">
+                ✅ Profile saved successfully!
+            </div>
+            <div id="errorBanner" style="display:none; background:var(--red); color:white; padding:12px 20px; border-radius:12px; margin-bottom:20px; font-weight:600; text-align:center;"></div>
+
+            <!-- Section: Identity -->
+            <div class="card" style="margin-bottom:20px;">
+                <h2 style="margin-bottom:20px;">👤 Personal Info</h2>
+                <div class="settings-grid">
+                    <div class="settings-field">
+                        <label>Full Name</label>
+                        <input type="text" id="s_name" value="{{ session.get('user_name','') }}" placeholder="Your name">
+                    </div>
+                    <div class="settings-field">
+                        <label>Age</label>
+                        <input type="number" id="s_age" value="{{ profile.age or '' }}" min="10" max="100" placeholder="Age">
+                    </div>
+                    <div class="settings-field">
+                        <label>Gender</label>
+                        <select id="s_gender">
+                            <option value="male" {{ 'selected' if profile.gender == 'male' }}>Male</option>
+                            <option value="female" {{ 'selected' if profile.gender == 'female' }}>Female</option>
+                            <option value="other" {{ 'selected' if profile.gender == 'other' }}>Other</option>
+                        </select>
+                    </div>
+                    <div class="settings-field">
+                        <label>Height (cm)</label>
+                        <input type="number" id="s_height" value="{{ profile.height_cm or '' }}" min="100" max="250" placeholder="cm">
+                    </div>
+                    <div class="settings-field">
+                        <label>Weight (kg)</label>
+                        <input type="number" id="s_weight" value="{{ profile.weight_kg or '' }}" min="30" max="300" step="0.1" placeholder="kg">
+                    </div>
+                    <div class="settings-field">
+                        <label>Target Weight (kg)</label>
+                        <input type="number" id="s_target_weight" value="{{ profile.target_weight or '' }}" min="30" max="300" step="0.1" placeholder="kg (optional)">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Training -->
+            <div class="card" style="margin-bottom:20px;">
+                <h2 style="margin-bottom:20px;">🏋️ Training Preferences</h2>
+                <div class="settings-grid">
+                    <div class="settings-field">
+                        <label>Experience Level</label>
+                        <select id="s_experience">
+                            <option value="beginner" {{ 'selected' if profile.experience_level == 'beginner' }}>Beginner</option>
+                            <option value="intermediate" {{ 'selected' if profile.experience_level == 'intermediate' }}>Intermediate</option>
+                            <option value="advanced" {{ 'selected' if profile.experience_level == 'advanced' }}>Advanced</option>
+                            <option value="athlete" {{ 'selected' if profile.experience_level == 'athlete' }}>Athlete</option>
+                        </select>
+                    </div>
+                    <div class="settings-field">
+                        <label>Training Days / Week</label>
+                        <input type="number" id="s_training_days" value="{{ profile.training_days_per_week or 4 }}" min="1" max="7">
+                    </div>
+                    <div class="settings-field">
+                        <label>Minutes Per Session</label>
+                        <select id="s_minutes">
+                            {% for m in [30, 45, 60, 90] %}
+                            <option value="{{ m }}" {{ 'selected' if profile.minutes_per_session == m }}>{{ m }} min</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="settings-field">
+                        <label>Preferred Time</label>
+                        <select id="s_time">
+                            <option value="morning" {{ 'selected' if profile.preferred_time == 'morning' }}>Morning</option>
+                            <option value="afternoon" {{ 'selected' if profile.preferred_time == 'afternoon' }}>Afternoon</option>
+                            <option value="evening" {{ 'selected' if profile.preferred_time == 'evening' }}>Evening</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-field" style="margin-top:16px;">
+                    <label>Goals <small style="color:var(--text-dim);">(select all that apply)</small></label>
+                    <div class="multi-select-grid" id="s_goals">
+                        {% for g in ['fat_loss','muscle_gain','athletics','sports','strength','flexibility','general_fitness','endurance'] %}
+                        <label class="multi-chip {{ 'selected' if g in goals }}">
+                            <input type="checkbox" value="{{ g }}" {{ 'checked' if g in goals }}>
+                            {{ g.replace('_',' ').title() }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="settings-field" style="margin-top:16px;">
+                    <label>Target Muscle Groups</label>
+                    <div class="multi-select-grid" id="s_muscles">
+                        {% for m in ['chest','back','shoulders','arms','legs','core','glutes'] %}
+                        <label class="multi-chip {{ 'selected' if m in muscles }}">
+                            <input type="checkbox" value="{{ m }}" {{ 'checked' if m in muscles }}>
+                            {{ m.title() }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="settings-field" style="margin-top:16px;">
+                    <label>Available Equipment</label>
+                    <div class="multi-select-grid" id="s_equipment">
+                        {% set eq_list = profile.equipment or [] %}
+                        {% for e in ['dumbbells','barbell','machines','bodyweight_only','resistance_bands','cable_machine','pullup_bar','kettlebells'] %}
+                        <label class="multi-chip {{ 'selected' if e in eq_list }}">
+                            <input type="checkbox" value="{{ e }}" {{ 'checked' if e in eq_list }}>
+                            {{ e.replace('_',' ').title() }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Diet -->
+            <div class="card" style="margin-bottom:20px;">
+                <h2 style="margin-bottom:20px;">🥗 Diet Preferences</h2>
+                <div class="settings-grid">
+                    <div class="settings-field">
+                        <label>Diet Type</label>
+                        <select id="s_diet_type">
+                            {% for d in ['non_veg','veg','vegan','keto','paleo','mediterranean'] %}
+                            <option value="{{ d }}" {{ 'selected' if diet.diet_type == d }}>{{ d.replace('_',' ').title() }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="settings-field" style="align-self:center;">
+                        <label class="toggle-label" style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                            <span>🇮🇳 Indianize Meals</span>
+                            <input type="checkbox" id="s_indianize" class="toggle-check" {{ 'checked' if diet.indianize }}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: App Preferences -->
+            <div class="card" style="margin-bottom:20px;">
+                <h2 style="margin-bottom:20px;">⚙️ App Preferences</h2>
+                <div class="settings-field">
+                    <label>Theme</label>
+                    <div style="display:flex; gap:12px; margin-top:8px;">
+                        <button class="btn btn-sm" id="themeLight" onclick="setTheme('light')" style="flex:1;">☀️ Light</button>
+                        <button class="btn btn-sm" id="themeDark" onclick="setTheme('dark')" style="flex:1;">🌙 Dark</button>
+                    </div>
+                </div>
+                <div class="settings-field" style="margin-top:16px;">
+                    <label>Workout Reminder</label>
+                    <p style="color:var(--text-muted); font-size:0.83rem; margin-top:4px;">
+                        Reminders will appear as a banner based on your preferred workout time.
+                        Currently set to: <strong>{{ profile.preferred_time | default('not set') | title }}</strong>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Save Button -->
+            <div style="display:flex; gap:12px; justify-content:flex-end;">
+                <a href="/dashboard" class="btn btn-sm" style="text-decoration:none; background:var(--bg-input); color:var(--text-muted);">Cancel</a>
+                <button class="btn" id="saveBtn" onclick="saveSettings()">💾 Save Changes</button>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Multi-chip interaction
+document.querySelectorAll('.multi-chip input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', function() {
+        this.closest('.multi-chip').classList.toggle('selected', this.checked);
+    });
+});
+
+function getChecked(containerId) {
+    return [...document.querySelectorAll(`#${containerId} input[type=checkbox]:checked`)]
+        .map(cb => cb.value);
+}
+
+function setTheme(theme) {
+    if (theme === 'dark') {
+        document.body.classList.add('dark');
+        localStorage.setItem('fitscan_theme', 'dark');
+    } else {
+        document.body.classList.remove('dark');
+        localStorage.setItem('fitscan_theme', 'light');
+    }
+    document.getElementById('themeLight').style.opacity = theme === 'light' ? '1' : '0.5';
+    document.getElementById('themeDark').style.opacity = theme === 'dark' ? '1' : '0.5';
+}
+
+// Highlight current theme
+(function() {
+    const saved = localStorage.getItem('fitscan_theme') || 'light';
+    setTheme(saved);
+})();
+
+async function saveSettings() {
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Saving...';
+
+    const payload = {
+        name: document.getElementById('s_name').value.trim(),
+        age: parseInt(document.getElementById('s_age').value) || null,
+        gender: document.getElementById('s_gender').value,
+        height_cm: parseFloat(document.getElementById('s_height').value) || null,
+        weight_kg: parseFloat(document.getElementById('s_weight').value) || null,
+        target_weight: parseFloat(document.getElementById('s_target_weight').value) || null,
+        experience_level: document.getElementById('s_experience').value,
+        training_days_per_week: parseInt(document.getElementById('s_training_days').value) || 4,
+        minutes_per_session: parseInt(document.getElementById('s_minutes').value) || 60,
+        preferred_time: document.getElementById('s_time').value,
+        goals: getChecked('s_goals'),
+        target_muscles: getChecked('s_muscles'),
+        equipment: getChecked('s_equipment'),
+        diet_type: document.getElementById('s_diet_type').value,
+        indianize: document.getElementById('s_indianize').checked,
+    };
+
+    try {
+        const resp = await apiPost('/api/profile/update', payload);
+        if (resp.error) throw new Error(resp.error);
+        const banner = document.getElementById('saveBanner');
+        banner.style.display = 'block';
+        setTimeout(() => banner.style.display = 'none', 3000);
+    } catch (err) {
+        const errBanner = document.getElementById('errorBanner');
+        errBanner.textContent = '❌ ' + err.message;
+        errBanner.style.display = 'block';
+        setTimeout(() => errBanner.style.display = 'none', 4000);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '💾 Save Changes';
+    }
+}
+</script>
+{% endblock %}

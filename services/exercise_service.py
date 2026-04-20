@@ -18,7 +18,7 @@ from services.exercise_data import (
     EQUIPMENT_MODALITY_MAP, BODYWEIGHT_EXERCISES, get_search_name,
 )
 from services.rule_engine import (
-    BODY_TYPE_EXERCISE_RULES, GOAL_EXERCISE_TWEAKS,
+    BODY_TYPE_EXERCISE_RULES, GOAL_EXERCISE_TWEAKS, GENDER_EXERCISE_ADJUSTMENTS,
     WARMUPS, COOLDOWNS, EXERCISE_PLAN_SUMMARIES, WEEKLY_EXERCISE_NOTES,
     get_split_template, get_allowed_modalities,
     get_exercise_benefit, get_exercise_tip, get_estimated_duration,
@@ -45,17 +45,27 @@ def generate_exercise_plan(user_data):
     training_days = int(profile.get("training_days_per_week", 4))
     training_days = max(3, min(6, training_days))   # clamp 3–6
     equipment  = profile.get("equipment", []) or []
+    gender     = (profile.get("gender") or "male").lower()
+    gender_key = "female" if gender in ("female", "f") else "male"
+    gender_adj = GENDER_EXERCISE_ADJUSTMENTS[gender_key]
 
     primary_goal  = _primary_goal(goals)
     bt_rules      = BODY_TYPE_EXERCISE_RULES.get(body_type, BODY_TYPE_EXERCISE_RULES["Unknown"])
     goal_tweaks   = GOAL_EXERCISE_TWEAKS.get(primary_goal, GOAL_EXERCISE_TWEAKS["general_fitness"])
 
-    # Resolve rep range
+    # Resolve rep range, then shift both ends by gender offset
     rep_range = goal_tweaks["rep_range_override"] or bt_rules["rep_range"]
+    offset = gender_adj["rep_range_offset"]
+    if offset:
+        low, high = (int(x) for x in rep_range.split("-"))
+        rep_range = f"{low + offset}-{high + offset}"
+
     # sets
     sets = bt_rules["sets"] + goal_tweaks["sets_bonus"]
-    # rest
+    # rest — females recover faster; reduce rest by 15s
     rest_seconds = bt_rules["rest_seconds"]
+    if gender_key == "female":
+        rest_seconds = max(30, rest_seconds - 15)
 
     # Allowed modalities from equipment
     allowed_modalities = get_allowed_modalities(equipment)
@@ -63,8 +73,8 @@ def generate_exercise_plan(user_data):
     # Experience → allowed levels
     exp_levels = _get_allowed_levels(experience)
 
-    # Target muscle groups (priority)
-    priority_muscle_groups = _resolve_target_muscles(muscles)
+    # Target muscle groups (priority) + gender priority muscles merged
+    priority_muscle_groups = _resolve_target_muscles(muscles) | gender_adj["priority_muscles"]
 
     # Day split template
     split_template = get_split_template(training_days)
@@ -72,7 +82,7 @@ def generate_exercise_plan(user_data):
     # Build exercise pool per split type
     exercise_pool = _build_exercise_pool(
         body_type, primary_goal, allowed_modalities, exp_levels,
-        priority_muscle_groups, goal_tweaks
+        priority_muscle_groups, goal_tweaks, gender_adj
     )
 
     # Generate 7-day plan
@@ -83,7 +93,7 @@ def generate_exercise_plan(user_data):
         else:
             day_exercises = _select_exercises_for_day(
                 split_type, exercise_pool, sets, rep_range, rest_seconds,
-                body_type, goals, experience, training_days
+                body_type, goals, experience, training_days, gender_adj
             )
             warmup  = WARMUPS.get(split_type, WARMUPS["full_body"])
             cooldown = COOLDOWNS.get(split_type, COOLDOWNS["full_body"])
@@ -139,15 +149,23 @@ def _resolve_target_muscles(muscles):
 
 
 def _build_exercise_pool(body_type, primary_goal, allowed_modalities, exp_levels,
-                         priority_muscle_groups, goal_tweaks):
+                         priority_muscle_groups, goal_tweaks, gender_adj=None):
     """
     Build a dict: split_type → list of filtered exercises.
     Exercises are sorted: priority muscles first, compound first for relevant body types.
+    gender_adj adjusts isolation rules and adds score bonuses for gender-priority muscles.
     """
+    if gender_adj is None:
+        gender_adj = GENDER_EXERCISE_ADJUSTMENTS["male"]
+
     compound_only = goal_tweaks.get("compound_only", False)
     isolation_allowed = BODY_TYPE_EXERCISE_RULES.get(
         body_type, BODY_TYPE_EXERCISE_RULES["Unknown"]
     )["isolation_allowed"]
+
+    # Gender override: females can always use isolation regardless of body type
+    if gender_adj.get("isolation_allowed_override") is True:
+        isolation_allowed = True
 
     pool = defaultdict(list)
 
@@ -157,12 +175,10 @@ def _build_exercise_pool(body_type, primary_goal, allowed_modalities, exp_levels
             continue
 
         # Equipment / modality filter
-        # FW covers both free weights and bodyweight exercises
         ex_modality = ex["modality"]
         if ex_modality not in allowed_modalities:
-            # Special case: if only bodyweight available, allow FW exercises that are bodyweight
             if "FW" in allowed_modalities and ex["name"] in BODYWEIGHT_EXERCISES:
-                pass  # allow
+                pass  # allow bodyweight exercises with FW modality
             else:
                 continue
 
@@ -182,6 +198,9 @@ def _build_exercise_pool(body_type, primary_goal, allowed_modalities, exp_levels
         score = 0
         if ex["muscle_group"] in priority_muscle_groups:
             score += 10
+        # Extra bonus for gender-priority muscles (glutes/lower-body for females)
+        if ex["muscle_group"] in gender_adj.get("priority_muscles", set()):
+            score += gender_adj.get("priority_muscle_bonus", 0)
         if ex["joint_type"] == "M":                     # compound
             score += 3
         if body_type == "Ectomorph" and ex["joint_type"] == "M":
@@ -208,7 +227,8 @@ def _build_exercise_pool(body_type, primary_goal, allowed_modalities, exp_levels
 
 
 def _select_exercises_for_day(split_type, pool, sets, rep_range, rest_seconds,
-                               body_type, goals, experience, training_days):
+                               body_type, goals, experience, training_days,
+                               gender_adj=None):
     """
     Select exercises for a training day.
 
@@ -218,7 +238,11 @@ def _select_exercises_for_day(split_type, pool, sets, rep_range, rest_seconds,
         Endo: 2 core finishers (metabolic + fat-burn focus)
         Meso: 2 core finishers (strength + stability)
         Ecto: 1 core finisher (minimise extra volume)
+        Females get +1 core finisher on top of body-type default.
     """
+    if gender_adj is None:
+        gender_adj = GENDER_EXERCISE_ADJUSTMENTS["male"]
+
     target_n = _target_exercise_count(split_type, training_days, experience)
 
     if split_type == "full_body":
@@ -226,8 +250,8 @@ def _select_exercises_for_day(split_type, pool, sets, rep_range, rest_seconds,
         exercises = _select_from_full_body(pool, target_n, body_type)
         core_finisher_count = 0
     else:
-        # How many core finishers to tack on
-        core_finisher_count = _core_finisher_count(body_type)
+        # How many core finishers to tack on (body-type base + gender bonus)
+        core_finisher_count = _core_finisher_count(body_type, gender_adj)
         main_n = target_n - core_finisher_count
 
         candidates = pool.get(split_type, [])
@@ -270,9 +294,11 @@ def _select_exercises_for_day(split_type, pool, sets, rep_range, rest_seconds,
     return result
 
 
-def _core_finisher_count(body_type):
-    """How many core finisher exercises to append per session by body type."""
-    return {"Endomorph": 2, "Mesomorph": 2, "Ectomorph": 1, "Unknown": 2}.get(body_type, 2)
+def _core_finisher_count(body_type, gender_adj=None):
+    """How many core finisher exercises to append per session by body type + gender."""
+    base = {"Endomorph": 2, "Mesomorph": 2, "Ectomorph": 1, "Unknown": 2}.get(body_type, 2)
+    bonus = (gender_adj or {}).get("core_finisher_bonus", 0)
+    return base + bonus
 
 
 def _select_from_full_body(pool, target_n, body_type):

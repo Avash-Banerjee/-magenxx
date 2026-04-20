@@ -5,142 +5,6 @@
 
 const scan = SCAN_DATA;
 
-// ── 1. Somatotype Component Bar Chart ──
-(function renderComponentChart() {
-    const vals = [scan.endomorphy || 0, scan.mesomorphy || 0, scan.ectomorphy || 0];
-    const trace = {
-        x: ["Endomorphy", "Mesomorphy", "Ectomorphy"],
-        y: vals,
-        type: "bar",
-        marker: {
-            color: ["#ef4444", "#10b981", "#3b82f6"],
-            line: { color: "rgba(0,0,0,0.05)", width: 1 }
-        },
-        text: vals.map(v => v.toFixed(2)),
-        textposition: "outside",
-        textfont: { color: "#475569", size: 14, family: "Inter, Segoe UI" },
-    };
-
-    const layout = {
-        ...PLOTLY_LAYOUT,
-        yaxis: { gridcolor: "rgba(0,0,0,0.05)", zeroline: true, zerolinecolor: "rgba(0,0,0,0.1)" },
-        xaxis: { fixedrange: true },
-        height: 280,
-        margin: { t: 20, b: 40, l: 40, r: 20 },
-    };
-
-    Plotly.newPlot("chartComponents", [trace], layout, PLOTLY_CONFIG);
-})();
-
-// ── 2. Symmetry Radar Chart ──
-(function renderSymmetryChart() {
-    const poseData = scan.pose_data || {};
-    const symScores = poseData.symmetry_scores || {};
-    const labels = Object.keys(symScores);
-    const values = labels.map(k => symScores[k].ratio || 0);
-
-    if (labels.length === 0) {
-        document.getElementById("chartSymmetry").innerHTML =
-            '<p style="color:var(--text-muted); text-align:center; padding:40px;">No symmetry data</p>';
-        return;
-    }
-
-    const rLabels = [...labels, labels[0]];
-    const rValues = [...values, values[0]];
-
-    const trace = {
-        type: "scatterpolar",
-        r: rValues,
-        theta: rLabels,
-        fill: "toself",
-        fillcolor: "rgba(6,182,212,0.15)",
-        line: { color: "#06b6d4", width: 2 },
-        marker: { color: "#06b6d4", size: 6 },
-    };
-
-    const perfect = {
-        type: "scatterpolar",
-        r: Array(rLabels.length).fill(1.0),
-        theta: rLabels,
-        line: { color: "rgba(16,185,129,0.3)", width: 1, dash: "dot" },
-        marker: { size: 0 },
-        showlegend: false,
-    };
-
-    const layout = {
-        ...PLOTLY_LAYOUT,
-        polar: {
-            bgcolor: "rgba(255,255,255,0)",
-            radialaxis: {
-                visible: true,
-                range: [0.7, 1.3],
-                gridcolor: "rgba(0,0,0,0.06)",
-                color: "#94a3b8",
-            },
-            angularaxis: { gridcolor: "rgba(0,0,0,0.06)", color: "#64748b" },
-        },
-        height: 300,
-        margin: { t: 30, b: 30, l: 60, r: 60 },
-        showlegend: false,
-    };
-
-    Plotly.newPlot("chartSymmetry", [perfect, trace], layout, PLOTLY_CONFIG);
-})();
-
-// ── 3. Body Proportions Chart ──
-(function renderProportionsChart() {
-    const poseData = scan.pose_data || {};
-    const props = poseData.body_proportions || {};
-    const hmrData = scan.hmr_data || {};
-    const ratios = hmrData.ratios || {};
-
-    const labels = {
-        "Torso / Thigh": props["Torso / Thigh"],
-        "Shoulder / Hip Width": props["Shoulder / Hip Width"],
-        "Upper Arm / Forearm": props["Upper Arm / Forearm"],
-        "Waist / Hip (HMR)": ratios["WHR"],
-        "Waist / Height (HMR)": ratios["WHtR"],
-    };
-
-    const names = [];
-    const vals = [];
-    for (const [k, v] of Object.entries(labels)) {
-        if (v !== undefined && v !== null) {
-            names.push(k);
-            vals.push(v);
-        }
-    }
-
-    if (names.length === 0) {
-        document.getElementById("chartProportions").innerHTML =
-            '<p style="color:var(--text-muted); text-align:center; padding:40px;">No proportion data</p>';
-        return;
-    }
-
-    const trace = {
-        type: "bar",
-        x: vals,
-        y: names,
-        orientation: "h",
-        marker: {
-            color: vals.map((_, i) => PLOTLY_LAYOUT.colorway[i % PLOTLY_LAYOUT.colorway.length]),
-        },
-        text: vals.map(v => v.toFixed(3)),
-        textposition: "outside",
-        textfont: { color: "#475569", size: 12 },
-    };
-
-    const layout = {
-        ...PLOTLY_LAYOUT,
-        height: 250,
-        margin: { t: 10, b: 30, l: 160, r: 60 },
-        xaxis: { gridcolor: "rgba(0,0,0,0.05)" },
-        yaxis: { automargin: true },
-    };
-
-    Plotly.newPlot("chartProportions", [trace], layout, PLOTLY_CONFIG);
-})();
-
 // ── 4. Interactive Body Model ──
 (function () {
     if (typeof initBodyModel === "function") {
@@ -254,14 +118,20 @@ const scan = SCAN_DATA;
     drawECG();
 })();
 
-// ── Water Intake ──
-window._waterGlasses = 4;
-function changeWater(delta) {
+// ── Water Intake (persisted via API) ──
+window._waterGlasses = 0;
+
+async function changeWater(delta) {
     window._waterGlasses = Math.max(0, Math.min(8, window._waterGlasses + delta));
-    const g = window._waterGlasses;
+    updateWaterUI(window._waterGlasses);
+    try {
+        await apiPost('/api/water/update', { glasses: window._waterGlasses });
+    } catch(e) { /* silent */ }
+}
+
+function updateWaterUI(g) {
     document.getElementById('waterGlasses').textContent = g;
     document.getElementById('waterMl').textContent = (g * 250) + ' ml';
-    // Animate bottle fill
     const fill = document.getElementById('waterFill');
     if (fill) {
         const pct = g / 8;
@@ -272,8 +142,17 @@ function changeWater(delta) {
         fill.setAttribute('height', fillHeight);
     }
 }
-// Init bottle fill
-changeWater(0);
+
+// Load today's water from API
+(async function loadWater() {
+    try {
+        const resp = await apiGet('/api/water/today');
+        window._waterGlasses = resp.glasses || 0;
+        updateWaterUI(window._waterGlasses);
+    } catch(e) {
+        updateWaterUI(0);
+    }
+})();
 
 // ── SpO2 Arc Animation ──
 (function initSpO2() {
@@ -320,18 +199,30 @@ changeWater(0);
     document.querySelector('.calbal-svg text:last-of-type').textContent = bal < 0 ? 'kcal deficit' : 'kcal surplus';
 })();
 
-// ── Workout Streak Days ──
-(function initStreak() {
-    const wrap = document.getElementById('streakDays');
+// ── Workout Streak Days (real data from API) ──
+(async function initStreak() {
+    const wrap        = document.getElementById('streakDays');
+    const countEl     = document.getElementById('streakCount');
+    const bestEl      = document.getElementById('streakBest');
     if (!wrap) return;
-    const days = ['M','T','W','T','F','S','S'];
-    const done = [true, true, true, true, true, true, true]; // last 7 days
-    const today = new Date().getDay(); // 0=Sun
-    days.forEach((d, i) => {
+
+    const dayLetters = ['M','T','W','T','F','S','S'];
+    let streakData   = { current_streak: 0, best_streak: 0, last_7_days: [false,false,false,false,false,false,false] };
+
+    try {
+        streakData = await apiGet('/api/progress/streak');
+    } catch(e) { /* use defaults */ }
+
+    if (countEl) countEl.textContent = streakData.current_streak || 0;
+    if (bestEl)  bestEl.textContent  = streakData.best_streak || 0;
+
+    const done = streakData.last_7_days || [];
+    wrap.innerHTML = '';
+    done.forEach((worked, i) => {
         const el = document.createElement('div');
         const isToday = i === 6;
-        el.className = 'streak-day' + (done[i] ? (isToday ? ' today' : ' done') : '');
-        el.textContent = d;
+        el.className = 'streak-day' + (worked ? (isToday ? ' today' : ' done') : '');
+        el.textContent = dayLetters[i];
         wrap.appendChild(el);
     });
 })();
@@ -355,6 +246,279 @@ changeWater(0);
             col.appendChild(cell);
         }
         grid.appendChild(col);
+    }
+})();
+
+// ── Today's Focus Widget ──
+(async function initTodaysFocus() {
+    const focusEl = document.getElementById('todaysFocusContainer');
+    if (!focusEl) return;
+
+    try {
+        const resp = await apiGet('/api/exercise/plan/latest');
+        if (resp.error || !resp.weekly_plan) return;
+
+        const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+        const todayPlan = resp.weekly_plan.find(d => d.day === todayName);
+        if (!todayPlan) return;
+
+        if (todayPlan.is_rest_day) {
+            focusEl.innerHTML = `
+                <div class="todays-focus-card" style="background:linear-gradient(135deg,#475569,#334155);">
+                    <div class="focus-left">
+                        <h3>Today's Session</h3>
+                        <div class="focus-title">😴 Rest Day</div>
+                        <div class="focus-sub">${todayPlan.warmup || 'Light stretching + recovery'}</div>
+                    </div>
+                </div>`;
+            return;
+        }
+
+        const exercises = todayPlan.exercises || [];
+        const firstThree = exercises.slice(0, 3).map(e => e.name).join(', ');
+        const pillsHtml = exercises.slice(0, 3).map(e =>
+            `<span class="focus-ex-pill">${e.name}</span>`).join('');
+
+        focusEl.innerHTML = `
+            <div class="todays-focus-card">
+                <div class="focus-left">
+                    <h3>Today's Session — ${todayName}</h3>
+                    <div class="focus-title">${todayPlan.focus || 'Workout'}</div>
+                    <div class="focus-sub">⏱ ~${todayPlan.estimated_duration_min || 45} min &bull; ${exercises.length} exercises</div>
+                    <div class="focus-exercises" style="margin-top:8px;">${pillsHtml}</div>
+                </div>
+                <a href="/exercise" class="focus-start-btn">Start Workout →</a>
+            </div>`;
+    } catch(e) { /* silent — no plan yet */ }
+})();
+
+// ── Progress Charts — History Tab ──
+(async function initProgressCharts() {
+    const historyTab = document.getElementById('tab-history');
+    if (!historyTab) return;
+
+    try {
+        const scans = await apiGet('/api/progress/history');
+        if (!scans || scans.length < 1) return;
+
+        // Build chart container in history tab
+        const chartHtml = `
+        <div class="card progress-chart-section" style="margin-bottom:16px;">
+            <h2>📈 Body Type Score Over Time</h2>
+            <div id="chartProgressSoma" class="chart-container"></div>
+        </div>
+        <div class="card progress-chart-section" style="margin-bottom:16px;">
+            <h2>⚖️ BMI Trend</h2>
+            <div id="chartProgressBMI" class="chart-container"></div>
+        </div>
+        ${scans.length >= 2 ? `
+        <div class="card" style="margin-bottom:16px;">
+            <h2>🔍 Scan Comparison</h2>
+            <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px; flex-wrap:wrap;">
+                <div>
+                    <label style="font-size:0.78rem; color:var(--text-muted); font-weight:600;">SCAN A</label>
+                    <select id="cmpScanA" style="display:block; margin-top:4px; padding:7px 12px; border:1.5px solid var(--border-light); border-radius:8px; background:var(--bg-input); color:var(--text-primary);">
+                        ${scans.map((s,i) => `<option value="${i}">${s.scanned_at ? s.scanned_at.slice(0,10) : 'Scan ' + (i+1)} — ${s.body_type || '?'}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:0.78rem; color:var(--text-muted); font-weight:600;">SCAN B</label>
+                    <select id="cmpScanB" style="display:block; margin-top:4px; padding:7px 12px; border:1.5px solid var(--border-light); border-radius:8px; background:var(--bg-input); color:var(--text-primary);">
+                        ${scans.map((s,i) => `<option value="${i}" ${i === scans.length-1 ? '' : (i === 0 ? 'selected' : '')}>${s.scanned_at ? s.scanned_at.slice(0,10) : 'Scan ' + (i+1)} — ${s.body_type || '?'}</option>`).join('')}
+                    </select>
+                </div>
+                <button class="btn btn-sm" onclick="renderComparison()" style="align-self:flex-end;">Compare</button>
+            </div>
+            <div id="comparisonResult" class="scan-compare-grid"></div>
+        </div>` : ''}`;
+
+        // Replace the "history coming soon" content
+        historyTab.innerHTML = chartHtml;
+
+        // Render somatotype trend
+        const dates  = scans.map(s => s.scanned_at ? s.scanned_at.slice(0,10) : '');
+        const endos  = scans.map(s => s.endomorphy  || 0);
+        const mesos  = scans.map(s => s.mesomorphy  || 0);
+        const ectos  = scans.map(s => s.ectomorphy  || 0);
+
+        Plotly.newPlot('chartProgressSoma', [
+            { x: dates, y: endos, name: 'Endomorphy', type: 'scatter', mode: 'lines+markers',
+              line: { color: '#ef4444', width: 2 }, marker: { size: 7 } },
+            { x: dates, y: mesos, name: 'Mesomorphy', type: 'scatter', mode: 'lines+markers',
+              line: { color: '#10b981', width: 2 }, marker: { size: 7 } },
+            { x: dates, y: ectos, name: 'Ectomorphy', type: 'scatter', mode: 'lines+markers',
+              line: { color: '#3b82f6', width: 2 }, marker: { size: 7 } },
+        ], {
+            ...PLOTLY_LAYOUT,
+            height: 260,
+            yaxis: { range: [0, 7], gridcolor: 'rgba(0,0,0,0.05)' },
+            xaxis: { fixedrange: true },
+            margin: { t: 20, b: 40, l: 40, r: 20 },
+        }, PLOTLY_CONFIG);
+
+        // Render BMI trend
+        const bmis = scans.map(s => s.bmi || 0);
+        Plotly.newPlot('chartProgressBMI', [
+            { x: dates, y: bmis, name: 'BMI', type: 'scatter', mode: 'lines+markers+text',
+              text: bmis.map(v => v.toFixed(1)),
+              textposition: 'top center',
+              line: { color: '#06b6d4', width: 2 }, marker: { size: 8, color: '#06b6d4' } },
+        ], {
+            ...PLOTLY_LAYOUT,
+            height: 220,
+            shapes: [
+                { type: 'rect', x0: dates[0], x1: dates[dates.length-1], y0: 18.5, y1: 24.9,
+                  fillcolor: 'rgba(16,185,129,0.08)', line: { width: 0 } },
+            ],
+            yaxis: { gridcolor: 'rgba(0,0,0,0.05)' },
+            xaxis: { fixedrange: true },
+            margin: { t: 20, b: 40, l: 40, r: 20 },
+        }, PLOTLY_CONFIG);
+
+        // Expose scans for comparison
+        window._scanHistory = scans;
+        if (scans.length >= 2) {
+            // Default: compare first and last
+            document.getElementById('cmpScanA').value = 0;
+            document.getElementById('cmpScanB').value = scans.length - 1;
+            renderComparison();
+        }
+
+    } catch(e) { console.error('Progress history load failed:', e); }
+})();
+
+function renderComparison() {
+    const scans = window._scanHistory || [];
+    const aIdx  = parseInt(document.getElementById('cmpScanA')?.value || 0);
+    const bIdx  = parseInt(document.getElementById('cmpScanB')?.value || 1);
+    const a = scans[aIdx], b = scans[bIdx];
+    if (!a || !b) return;
+
+    function delta(valA, valB, decimals = 1) {
+        const d = (valB - valA);
+        const sign = d > 0 ? '+' : '';
+        const color = d > 0 ? 'var(--green)' : d < 0 ? 'var(--red)' : 'var(--text-dim)';
+        return `<span style="color:${color}; font-size:0.78rem;">${sign}${d.toFixed(decimals)}</span>`;
+    }
+
+    const result = document.getElementById('comparisonResult');
+    if (!result) return;
+    result.innerHTML = `
+        <div class="card" style="padding:20px;">
+            <h4 style="margin-bottom:12px; color:var(--text-muted);">${a.scanned_at?.slice(0,10) || 'Scan A'}</h4>
+            <div style="font-size:0.88rem;">
+                <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border-light);">
+                    <span>Body Type</span><strong>${a.body_type || '—'}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border-light);">
+                    <span>Endomorphy</span><strong>${(a.endomorphy||0).toFixed(1)}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border-light);">
+                    <span>Mesomorphy</span><strong>${(a.mesomorphy||0).toFixed(1)}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border-light);">
+                    <span>Ectomorphy</span><strong>${(a.ectomorphy||0).toFixed(1)}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:6px 0;">
+                    <span>BMI</span><strong>${(a.bmi||0).toFixed(1)}</strong>
+                </div>
+            </div>
+        </div>
+        <div class="card" style="padding:20px;">
+            <h4 style="margin-bottom:12px; color:var(--text-muted);">${b.scanned_at?.slice(0,10) || 'Scan B'}</h4>
+            <div style="font-size:0.88rem;">
+                <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border-light);">
+                    <span>Body Type</span><strong>${b.body_type || '—'}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border-light);">
+                    <span>Endomorphy</span><strong>${(b.endomorphy||0).toFixed(1)} ${delta(a.endomorphy||0, b.endomorphy||0)}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border-light);">
+                    <span>Mesomorphy</span><strong>${(b.mesomorphy||0).toFixed(1)} ${delta(a.mesomorphy||0, b.mesomorphy||0)}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border-light);">
+                    <span>Ectomorphy</span><strong>${(b.ectomorphy||0).toFixed(1)} ${delta(a.ectomorphy||0, b.ectomorphy||0)}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:6px 0;">
+                    <span>BMI</span><strong>${(b.bmi||0).toFixed(1)} ${delta(a.bmi||0, b.bmi||0, 2)}</strong>
+                </div>
+            </div>
+        </div>`;
+}
+
+// ── Body Type Education Modal ──
+(function initBodyTypeEdu() {
+    const edu = {
+        Endomorph: {
+            color: '#ef4444',
+            desc: 'Endomorphs tend to have a rounder, softer physique with a naturally higher body fat percentage and slower metabolism.',
+            rows: [
+                { icon: '💪', text: 'Build muscle easily but also gain fat quickly — diet control is key.' },
+                { icon: '🔥', text: 'Respond best to high-rep training with short rest periods to burn more calories.' },
+                { icon: '🥗', text: 'Carb intake should be lower and timed around workouts. Avoid simple sugars.' },
+                { icon: '🏃', text: 'Cardio and HIIT are important to boost metabolism and burn fat.' },
+                { icon: '⏱️', text: 'Consistency matters most — never skip sessions, as metabolism slows quickly.' },
+            ],
+        },
+        Mesomorph: {
+            color: '#10b981',
+            desc: 'Mesomorphs have a naturally athletic, muscular build with efficient nutrient partitioning and quick adaptation to training.',
+            rows: [
+                { icon: '💪', text: 'Gain muscle and lose fat efficiently — most responsive to training.' },
+                { icon: '🏋️', text: 'Moderate rep ranges (8-12) with progressive overload drives best results.' },
+                { icon: '🥗', text: 'Balanced macros work well. Carb-cycle: higher carbs on training days.' },
+                { icon: '⚡', text: 'Plateaus can happen — vary training every 4-6 weeks to keep adapting.' },
+                { icon: '😴', text: 'Sleep is your biggest recovery tool — aim for 7-9 hours consistently.' },
+            ],
+        },
+        Ectomorph: {
+            color: '#3b82f6',
+            desc: 'Ectomorphs have a lean, narrow build with a fast metabolism that burns calories quickly, making muscle gain challenging.',
+            rows: [
+                { icon: '🍽️', text: 'Eating enough is the #1 challenge — caloric surplus is essential every day.' },
+                { icon: '🏋️', text: 'Heavy compound lifts (squats, deadlifts, bench) are the most effective exercises.' },
+                { icon: '🚫', text: 'Avoid excessive cardio — it burns precious calories needed for muscle growth.' },
+                { icon: '🛌', text: 'Sleep 8-9 hours for maximum growth hormone release and recovery.' },
+                { icon: '📅', text: 'Never skip meals — even one missed meal can set back your progress.' },
+            ],
+        },
+    };
+
+    const bodyType = (scan.body_type || 'Mesomorph');
+    const info = edu[bodyType] || edu['Mesomorph'];
+
+    // Inject modal
+    document.body.insertAdjacentHTML('beforeend', `
+        <div class="bt-edu-modal" id="btEduModal">
+            <div class="bt-edu-content">
+                <h2>About ${bodyType}</h2>
+                <span class="bt-badge" style="background:${info.color}22; color:${info.color};">${bodyType}</span>
+                <p style="font-size:0.88rem; color:var(--text-muted); margin-bottom:16px;">${info.desc}</p>
+                ${info.rows.map(r => `
+                    <div class="bt-edu-row">
+                        <span class="bt-edu-icon">${r.icon}</span>
+                        <span class="bt-edu-text">${r.text}</span>
+                    </div>`).join('')}
+                <button class="bt-edu-close" onclick="document.getElementById('btEduModal').classList.remove('active')">Got it ✓</button>
+            </div>
+        </div>`);
+
+    // Make the body type badge in the AI stat card clickable
+    const badge = document.querySelector('.ai-stat-card .ai-stat-header .name');
+    if (badge) {
+        badge.style.cursor = 'pointer';
+        badge.title = 'Click to learn about your body type';
+        badge.onclick = () => document.getElementById('btEduModal').classList.add('active');
+    }
+
+    // Also add a learn more button in advice card
+    const adviceCard = document.querySelector('.advice-card');
+    if (adviceCard) {
+        const learnBtn = document.createElement('button');
+        learnBtn.textContent = '🎓 Learn About ' + bodyType;
+        learnBtn.style.cssText = 'margin-top:12px; width:100%; padding:10px; border-radius:10px; border:1.5px solid var(--border-light); background:var(--bg-input); cursor:pointer; font-weight:600; font-size:0.85rem; color:var(--text-primary);';
+        learnBtn.onclick = () => document.getElementById('btEduModal').classList.add('active');
+        adviceCard.appendChild(learnBtn);
     }
 })();
 

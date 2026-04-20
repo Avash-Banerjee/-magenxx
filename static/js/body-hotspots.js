@@ -159,6 +159,11 @@
             // Progress bar
             html += `<div class="bt-progress"><div class="bt-progress-bar" style="width:${score}%"></div></div>`;
 
+            // View exercises button
+            if (group !== "head") {
+                html += `<a href="/exercise?muscle=${encodeURIComponent(group)}" class="bt-view-exercises-btn">💪 View Exercises →</a>`;
+            }
+
             tooltip.innerHTML = html;
             tooltip.classList.add("visible");
 

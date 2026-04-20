@@ -116,6 +116,41 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (scan_id) REFERENCES scan_results(id)
         );
+
+        CREATE TABLE IF NOT EXISTS exercise_set_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            plan_id INTEGER NOT NULL,
+            day_name TEXT,
+            exercise_name TEXT,
+            set_number INTEGER,
+            weight_kg REAL,
+            reps_done INTEGER,
+            notes TEXT,
+            logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (plan_id) REFERENCES exercise_plans(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS meal_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            plan_id INTEGER NOT NULL,
+            day_name TEXT,
+            meal_name TEXT,
+            completed INTEGER DEFAULT 0,
+            logged_at TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (plan_id) REFERENCES diet_plans(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS water_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            log_date TEXT NOT NULL,
+            glasses INTEGER DEFAULT 0,
+            UNIQUE(user_id, log_date)
+        );
     """)
 
     # ── Migrations for existing databases ──
@@ -580,6 +615,231 @@ def get_full_user_data(user_id):
         "diet_preferences": get_diet_preferences(user_id),
         "latest_scan": get_latest_scan(user_id),
     }
+
+
+# ═══════════════════════════════════════
+#  EXERCISE SET LOGS
+# ═══════════════════════════════════════
+
+def log_exercise_set(user_id, plan_id, day_name, exercise_name, set_number, weight_kg, reps_done, notes=""):
+    """Upsert a set log entry (weight + reps for a specific set)."""
+    conn = get_db()
+    existing = conn.execute("""
+        SELECT id FROM exercise_set_logs
+        WHERE user_id=? AND plan_id=? AND day_name=? AND exercise_name=? AND set_number=?
+    """, (user_id, plan_id, day_name, exercise_name, set_number)).fetchone()
+    if existing:
+        conn.execute("""
+            UPDATE exercise_set_logs SET weight_kg=?, reps_done=?, notes=?, logged_at=?
+            WHERE id=?
+        """, (weight_kg, reps_done, notes, datetime.now().isoformat(), existing["id"]))
+    else:
+        conn.execute("""
+            INSERT INTO exercise_set_logs
+            (user_id, plan_id, day_name, exercise_name, set_number, weight_kg, reps_done, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, plan_id, day_name, exercise_name, set_number, weight_kg, reps_done, notes))
+    conn.commit()
+    conn.close()
+
+
+def get_set_logs(user_id, plan_id):
+    """Return all set logs for a plan as a list of dicts."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT * FROM exercise_set_logs WHERE user_id=? AND plan_id=?
+        ORDER BY day_name, exercise_name, set_number
+    """, (user_id, plan_id)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ═══════════════════════════════════════
+#  MEAL LOGS
+# ═══════════════════════════════════════
+
+def log_meal(user_id, plan_id, day_name, meal_name, completed):
+    """Upsert a meal completion log."""
+    conn = get_db()
+    existing = conn.execute("""
+        SELECT id FROM meal_logs
+        WHERE user_id=? AND plan_id=? AND day_name=? AND meal_name=?
+    """, (user_id, plan_id, day_name, meal_name)).fetchone()
+    ts = datetime.now().isoformat() if completed else None
+    if existing:
+        conn.execute("UPDATE meal_logs SET completed=?, logged_at=? WHERE id=?",
+                     (int(completed), ts, existing["id"]))
+    else:
+        conn.execute("""
+            INSERT INTO meal_logs (user_id, plan_id, day_name, meal_name, completed, logged_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, plan_id, day_name, meal_name, int(completed), ts))
+    conn.commit()
+    conn.close()
+
+
+def get_meal_logs(user_id, plan_id):
+    """Return all meal logs for a plan."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT * FROM meal_logs WHERE user_id=? AND plan_id=?
+    """, (user_id, plan_id)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ═══════════════════════════════════════
+#  WATER LOGS
+# ═══════════════════════════════════════
+
+def update_water(user_id, glasses):
+    """Upsert today's water intake (glasses count)."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    glasses = max(0, int(glasses))
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO water_logs (user_id, log_date, glasses)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, log_date) DO UPDATE SET glasses=excluded.glasses
+    """, (user_id, today, glasses))
+    conn.commit()
+    conn.close()
+    return glasses
+
+
+def get_water_today(user_id):
+    """Return today's glass count."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = get_db()
+    row = conn.execute("SELECT glasses FROM water_logs WHERE user_id=? AND log_date=?",
+                       (user_id, today)).fetchone()
+    conn.close()
+    return row["glasses"] if row else 0
+
+
+# ═══════════════════════════════════════
+#  STREAK DATA
+# ═══════════════════════════════════════
+
+def get_streak_data(user_id):
+    """
+    Compute workout streak from exercise_log.
+    Returns: { current_streak, best_streak, last_7_days: [bool×7], total_workouts }
+    A day counts as a workout day if at least one exercise was completed.
+    """
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT date(completed_at) as workout_date
+        FROM exercise_log
+        WHERE user_id=? AND completed=1 AND completed_at IS NOT NULL
+        GROUP BY date(completed_at)
+        ORDER BY workout_date DESC
+    """, (user_id,)).fetchall()
+    conn.close()
+
+    workout_dates = set(r["workout_date"] for r in rows)
+    total_workouts = len(workout_dates)
+
+    from datetime import date, timedelta
+    today = date.today()
+
+    # Current streak
+    current_streak = 0
+    check = today
+    while check.isoformat() in workout_dates:
+        current_streak += 1
+        check -= timedelta(days=1)
+    # Also count if yesterday was done (streak still alive)
+    if current_streak == 0:
+        check = today - timedelta(days=1)
+        while check.isoformat() in workout_dates:
+            current_streak += 1
+            check -= timedelta(days=1)
+
+    # Best streak (scan all dates)
+    sorted_dates = sorted(workout_dates)
+    best_streak = 0
+    tmp = 0
+    prev = None
+    for d in sorted_dates:
+        d_obj = date.fromisoformat(d)
+        if prev and (d_obj - prev).days == 1:
+            tmp += 1
+        else:
+            tmp = 1
+        best_streak = max(best_streak, tmp)
+        prev = d_obj
+
+    # Last 7 days
+    last_7 = []
+    for i in range(6, -1, -1):
+        day = (today - timedelta(days=i)).isoformat()
+        last_7.append(day in workout_dates)
+
+    return {
+        "current_streak": current_streak,
+        "best_streak": best_streak,
+        "last_7_days": last_7,
+        "total_workouts": total_workouts,
+    }
+
+
+# ═══════════════════════════════════════
+#  EXERCISE SWAP
+# ═══════════════════════════════════════
+
+def get_next_exercise_for_swap(body_type, split_cat, exclude_names, goals, equipment, experience, gender="male"):
+    """Find the next best exercise for a given split category, excluding used exercises."""
+    from services.exercise_data import EXERCISE_DB, MUSCLE_GROUP_TAGS, EQUIPMENT_MODALITY_MAP, BODYWEIGHT_EXERCISES
+    from services.rule_engine import (BODY_TYPE_EXERCISE_RULES, GOAL_EXERCISE_TWEAKS,
+                                      GENDER_EXERCISE_ADJUSTMENTS, get_allowed_modalities, _primary_goal)
+
+    allowed_modalities = get_allowed_modalities(equipment)
+    exp_map = {"beginner": {"Beginner"}, "intermediate": {"Beginner", "Intermediate"},
+               "advanced": {"Beginner", "Intermediate", "Advanced"}}
+    exp_levels = exp_map.get(experience, {"Beginner"})
+
+    gender_key = "female" if str(gender).lower() in ("female", "f") else "male"
+    gender_adj = GENDER_EXERCISE_ADJUSTMENTS[gender_key]
+
+    primary_goal = _primary_goal(goals)
+    goal_tweaks = GOAL_EXERCISE_TWEAKS.get(primary_goal, GOAL_EXERCISE_TWEAKS["general_fitness"])
+    bt_rules = BODY_TYPE_EXERCISE_RULES.get(body_type, BODY_TYPE_EXERCISE_RULES["Unknown"])
+    compound_only = goal_tweaks.get("compound_only", False)
+    isolation_allowed = bt_rules["isolation_allowed"]
+    # Females can always use isolation exercises
+    if gender_adj.get("isolation_allowed_override") is True:
+        isolation_allowed = True
+
+    candidates = []
+    for ex in EXERCISE_DB:
+        if ex["name"] in exclude_names:
+            continue
+        if ex["level"] not in exp_levels:
+            continue
+        ex_modality = ex["modality"]
+        if ex_modality not in allowed_modalities:
+            if not ("FW" in allowed_modalities and ex["name"] in BODYWEIGHT_EXERCISES):
+                continue
+        if compound_only and ex["joint_type"] == "S":
+            continue
+        if not isolation_allowed and ex["joint_type"] == "S":
+            continue
+        mg_tag = MUSCLE_GROUP_TAGS.get(ex["muscle_group"])
+        if not mg_tag or mg_tag["split"] != split_cat:
+            continue
+        score = 3 if ex["joint_type"] == "M" else 0
+        if body_type == "Ectomorph" and ex["joint_type"] == "M":
+            score += 5
+        # Boost gender-priority muscles in scoring
+        if ex["muscle_group"] in gender_adj.get("priority_muscles", set()):
+            score += gender_adj.get("priority_muscle_bonus", 0)
+        candidates.append((score, ex))
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0][1]
 
 
 # Initialize on import

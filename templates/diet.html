@@ -25,7 +25,7 @@
                 Diet: <strong>{{ (data.diet_preferences or {}).get('diet_type', 'Non-Veg') | replace('_', ' ') | title }}</strong>
             </p>
         </div>
-        <div style="display:flex; gap:10px; align-items:center;">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <label class="toggle-label" style="font-size:0.85rem; display:flex; align-items:center; gap:8px; cursor:pointer;">
                 <span>🇮🇳 Indianize</span>
                 <input type="checkbox" id="toggleIndianize" class="toggle-check" onchange="handleIndianizeToggle(this.checked)">
@@ -33,6 +33,9 @@
             </label>
             <button class="btn btn-sm" id="btnGenerate" onclick="generateDietPlan()">
                 ✨ Generate Plan
+            </button>
+            <button class="pdf-export-btn" id="btnDietPdf" onclick="exportDietPDF()" style="display:none;">
+                📄 Export PDF
             </button>
         </div>
     </div>
@@ -109,6 +112,11 @@
 {% endif %}
 {% endblock %}
 
+{% block head %}
+<!-- jsPDF for client-side PDF export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+{% endblock %}
+
 {% block scripts %}
 {% if data and data.latest_scan %}
 <script>
@@ -117,5 +125,6 @@
     const EXISTING_INDIANIZED = {{ (plan.indianized if plan else 0) | tojson }};
 </script>
 <script src="/static/js/diet.js"></script>
+<script src="/static/js/pdf-export.js"></script>
 {% endif %}
 {% endblock %}
