@@ -3,6 +3,25 @@
    Light Theme
    ═══════════════════════════════════════ */
 
+// ── bfcache buster: force reload if user lands here via back/forward cache
+// OR if scan page flagged a fresh save. Prevents stale scan render.
+(function () {
+    try {
+        const flag = sessionStorage.getItem("fitscan_new_scan");
+        if (flag) {
+            sessionStorage.removeItem("fitscan_new_scan");
+            const renderedAt = window.__FITSCAN_RENDER_TS || 0;
+            if (parseInt(flag, 10) > renderedAt) {
+                window.location.reload();
+                return;
+            }
+        }
+    } catch (_) {}
+    window.addEventListener("pageshow", function (ev) {
+        if (ev.persisted) window.location.reload();
+    });
+})();
+
 const scan = SCAN_DATA;
 
 // ── 4. Interactive Body Model ──
@@ -531,12 +550,137 @@ function renderComparison() {
         zone.addEventListener('mouseenter', () => {
             const muscle = zone.dataset.muscle;
             const status = zone.dataset.status;
-            const icons = { fresh: '✅', recovering: '⏳', fatigued: '🔴' };
-            tooltip.textContent = `${muscle}: ${status.charAt(0).toUpperCase() + status.slice(1)} ${icons[status] || ''}`;
+            const icons = { fresh: 'Fresh', recovering: 'Recovering', fatigued: 'Fatigued' };
+            tooltip.textContent = `${muscle}: ${icons[status] || status}`;
             tooltip.style.display = 'block';
         });
         zone.addEventListener('mouseleave', () => {
             tooltip.style.display = 'none';
         });
     });
+})();
+
+// ── Somatotype Donut Chart ──
+(function initSomaDonut() {
+    const svg = document.querySelector('.soma-donut-svg');
+    if (!svg) return;
+
+    const endo = parseFloat(svg.dataset.endo) || 0;
+    const meso = parseFloat(svg.dataset.meso) || 0;
+    const ecto = parseFloat(svg.dataset.ecto) || 0;
+    const total = endo + meso + ecto;
+
+    const endoEl = document.getElementById('somaArcEndo');
+    const mesoEl = document.getElementById('somaArcMeso');
+    const ectoEl = document.getElementById('somaArcEcto');
+    const centerEl = document.getElementById('somaDonutCenter');
+
+    if (!endoEl || !mesoEl || !ectoEl) return;
+
+    // r=36 → circumference = 2π×36 ≈ 226.19
+    const CIRC = 226.19;
+    const GAP = 3; // px gap between segments
+
+    if (total <= 0) {
+        // Equal thirds if no data
+        const seg = (CIRC - GAP * 3) / 3;
+        endoEl.setAttribute('stroke-dasharray', `${seg} ${CIRC}`);
+        endoEl.setAttribute('stroke-dashoffset', 0);
+        mesoEl.setAttribute('stroke-dasharray', `${seg} ${CIRC}`);
+        mesoEl.setAttribute('stroke-dashoffset', -(seg + GAP));
+        ectoEl.setAttribute('stroke-dasharray', `${seg} ${CIRC}`);
+        ectoEl.setAttribute('stroke-dashoffset', -(seg * 2 + GAP * 2));
+        if (centerEl) centerEl.textContent = '—';
+        return;
+    }
+
+    const usable = CIRC - GAP * 3;
+    const endoLen = (endo / total) * usable;
+    const mesoLen = (meso / total) * usable;
+    const ectoLen = (ecto / total) * usable;
+
+    // Dominant type label + color
+    const dominant = endo >= meso && endo >= ecto ? 'Endo' :
+                     meso >= endo && meso >= ecto ? 'Meso' : 'Ecto';
+    const domColor  = dominant === 'Endo' ? '#ef4444' : dominant === 'Meso' ? '#10b981' : '#8b5cf6';
+
+    if (centerEl) {
+        centerEl.textContent = dominant;
+        centerEl.setAttribute('fill', domColor);
+    }
+
+    // Each arc: dasharray = "SEG CIRC", dashoffset = CIRC - start_offset
+    setTimeout(() => {
+        // Endo starts at 0 (top after rotate -90)
+        endoEl.setAttribute('stroke-dasharray', `${endoLen} ${CIRC}`);
+        endoEl.setAttribute('stroke-dashoffset', 0);
+
+        // Meso starts after endo + gap
+        const mesoStart = endoLen + GAP;
+        mesoEl.setAttribute('stroke-dasharray', `${mesoLen} ${CIRC}`);
+        mesoEl.setAttribute('stroke-dashoffset', -(mesoStart));
+
+        // Ecto starts after endo + gap + meso + gap
+        const ectoStart = mesoStart + mesoLen + GAP;
+        ectoEl.setAttribute('stroke-dasharray', `${ectoLen} ${CIRC}`);
+        ectoEl.setAttribute('stroke-dashoffset', -(ectoStart));
+    }, 400);
+})();
+
+// ── Sleep Schedule Tracker ──
+window._sleepQuality = 3;
+
+function setSleepQuality(q) {
+    window._sleepQuality = q;
+    const dots = document.querySelectorAll('#sleepQDots .sleep-q-dot');
+    const labels = ['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'];
+    dots.forEach((dot, i) => dot.classList.toggle('active', (i + 1) <= q));
+    const textEl = document.getElementById('sleepQText');
+    if (textEl) textEl.textContent = labels[q] || '';
+}
+
+function updateSleepTracker() {
+    const bedEl   = document.getElementById('sleepBedtime');
+    const wakeEl  = document.getElementById('sleepWakeup');
+    if (!bedEl || !wakeEl) return;
+
+    const [bH, bM] = bedEl.value.split(':').map(Number);
+    const [wH, wM] = wakeEl.value.split(':').map(Number);
+
+    let bedMin  = bH * 60 + bM;
+    let wakeMin = wH * 60 + wM;
+    if (wakeMin <= bedMin) wakeMin += 24 * 60; // crosses midnight
+
+    const hours = (wakeMin - bedMin) / 60;
+
+    const hrsEl = document.getElementById('sleepHrsDisplay');
+    if (hrsEl) hrsEl.textContent = hours.toFixed(1);
+
+    // Arc: path M8,55 A42,42 = semicircle, arc length ≈ π×42 ≈ 131.95
+    const arc = document.getElementById('sleepArc');
+    if (arc) {
+        const arcLen = Math.PI * 42;
+        const pct    = Math.min(hours / 10, 1);
+        arc.style.strokeDasharray = `${arcLen * pct} ${arcLen}`;
+    }
+
+    const statusEl = document.getElementById('sleepStatus');
+    if (statusEl) {
+        const diff = hours - 8;
+        if (diff >= 0) {
+            statusEl.textContent = `Goal: 8 hrs \u2022 ${diff.toFixed(1)} hrs over`;
+            statusEl.style.color = 'var(--green, #10b981)';
+        } else if (Math.abs(diff) < 1) {
+            statusEl.textContent = `Goal: 8 hrs \u2022 Almost there!`;
+            statusEl.style.color = 'var(--amber, #f59e0b)';
+        } else {
+            statusEl.textContent = `Goal: 8 hrs \u2022 ${Math.abs(diff).toFixed(1)} hrs short`;
+            statusEl.style.color = 'var(--red, #ef4444)';
+        }
+    }
+}
+
+// Init sleep tracker on load
+(function initSleepTracker() {
+    setTimeout(updateSleepTracker, 500);
 })();

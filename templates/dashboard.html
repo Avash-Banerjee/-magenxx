@@ -179,64 +179,47 @@
             {# Position on a linear scale: 0%=pure endo, 50%=pure meso, 100%=pure ecto #}
             {% set tendency = (((ecto - endo) / (soma_total if soma_total > 0 else 1) * 50) + 50) | int %}
             {% set tendency = [5, [tendency, 95] | min] | max %}
-            <!-- Somatotype Triangle -->
+            <!-- Somatotype Donut Chart -->
             <div class="somatotype-triangle-wrap">
                 <div class="soma-tri-title">Body Type Tendency</div>
                 <div class="soma-tri-label-name">{{ scan.body_type or 'Unknown' }}</div>
-                <div class="soma-tri-canvas-wrap">
-                    <svg viewBox="0 0 220 200" class="soma-tri-svg" id="somatypeSvg">
-                        <!-- Triangle outline -->
+                <div class="soma-donut-wrap">
+                    <svg class="soma-donut-svg" viewBox="0 0 100 100"
+                         data-endo="{{ "%.2f"|format(endo) }}"
+                         data-meso="{{ "%.2f"|format(meso) }}"
+                         data-ecto="{{ "%.2f"|format(ecto) }}">
                         <defs>
-                            <linearGradient id="triEndoGrad" x1="0%" y1="100%" x2="50%" y2="0%">
-                                <stop offset="0%" stop-color="#ef444440"/>
-                                <stop offset="100%" stop-color="#ef444408"/>
-                            </linearGradient>
-                            <linearGradient id="triMesoGrad" x1="50%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stop-color="#10b98140"/>
-                                <stop offset="100%" stop-color="#10b98108"/>
-                            </linearGradient>
-                            <linearGradient id="triEctoGrad" x1="100%" y1="100%" x2="0%" y2="100%">
-                                <stop offset="0%" stop-color="#8b5cf640"/>
-                                <stop offset="100%" stop-color="#8b5cf608"/>
-                            </linearGradient>
-                            <filter id="dotGlow">
-                                <feGaussianBlur stdDeviation="3" result="blur"/>
+                            <filter id="somaGlow">
+                                <feGaussianBlur stdDeviation="1.5" result="blur"/>
                                 <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
                             </filter>
                         </defs>
-                        <!-- Triangle vertices: top=Meso, bottom-left=Endo, bottom-right=Ecto -->
-                        <polygon points="110,12 14,178 206,178" fill="rgba(6,182,212,0.04)" stroke="rgba(6,182,212,0.25)" stroke-width="1.5"/>
-                        <!-- Colored corner fills -->
-                        <polygon points="110,12 14,178 62,178 90,95" fill="url(#triEndoGrad)"/>
-                        <polygon points="110,12 158,95 206,178 130,178" fill="url(#triMesoGrad)"/>
-                        <polygon points="62,178 206,178 158,95 90,95" fill="url(#triEctoGrad)"/>
-                        <!-- Grid lines inside triangle (3 levels) -->
-                        <line x1="62" y1="95" x2="158" y2="95" stroke="rgba(100,116,139,0.15)" stroke-width="1"/>
-                        <line x1="38" y1="137" x2="182" y2="137" stroke="rgba(100,116,139,0.15)" stroke-width="1"/>
-                        <!-- Corner labels -->
-                        <text x="110" y="9" text-anchor="middle" fill="#10b981" font-size="9" font-weight="700" font-family="Inter,sans-serif">MESO</text>
-                        <text x="10" y="192" text-anchor="start" fill="#ef4444" font-size="9" font-weight="700" font-family="Inter,sans-serif">ENDO</text>
-                        <text x="210" y="192" text-anchor="end" fill="#8b5cf6" font-size="9" font-weight="700" font-family="Inter,sans-serif">ECTO</text>
-                        <!-- Corner values -->
-                        <text x="110" y="22" text-anchor="middle" fill="#10b981" font-size="8" font-family="Inter,sans-serif">{{ "%.1f"|format(meso) }}</text>
-                        <text x="14" y="188" text-anchor="start" fill="#ef4444" font-size="8" font-family="Inter,sans-serif">{{ "%.1f"|format(endo) }}</text>
-                        <text x="206" y="188" text-anchor="end" fill="#8b5cf6" font-size="8" font-family="Inter,sans-serif">{{ "%.1f"|format(ecto) }}</text>
-                        <!-- User dot — barycentric position. Compute from endo/meso/ecto -->
-                        {% set soma_total = endo + meso + ecto %}
-                        {% if soma_total > 0 %}
-                          {% set pe = endo / soma_total %}
-                          {% set pm = meso / soma_total %}
-                          {% set pc = ecto / soma_total %}
-                          {# Triangle vertices: Meso(110,12) Endo(14,178) Ect(206,178) #}
-                          {% set dot_x = (110 * pm + 14 * pe + 206 * pc) | int %}
-                          {% set dot_y = (12 * pm + 178 * pe + 178 * pc) | int %}
-                        {% else %}
-                          {% set dot_x = 110 %}{% set dot_y = 122 %}
-                        {% endif %}
-                        <circle id="somatoDot" cx="{{ dot_x }}" cy="{{ dot_y }}" r="8" fill="#06b6d4" opacity="0.95" filter="url(#dotGlow)"/>
-                        <circle cx="{{ dot_x }}" cy="{{ dot_y }}" r="3.5" fill="white"/>
-                        <text x="{{ dot_x }}" y="{{ dot_y - 12 }}" text-anchor="middle" fill="#0e7490" font-size="7.5" font-weight="700" font-family="Inter,sans-serif">You</text>
+                        <!-- Background ring -->
+                        <circle cx="50" cy="50" r="36" fill="none" stroke="rgba(100,116,139,0.1)" stroke-width="9"/>
+                        <!-- Endo arc (red) -->
+                        <circle id="somaArcEndo" cx="50" cy="50" r="36" fill="none" stroke="#ef4444" stroke-width="9"
+                                stroke-linecap="butt" stroke-dasharray="0 226" transform="rotate(-90 50 50)"
+                                style="transition:stroke-dasharray 1.2s cubic-bezier(0.4,0,0.2,1);"/>
+                        <!-- Meso arc (green) -->
+                        <circle id="somaArcMeso" cx="50" cy="50" r="36" fill="none" stroke="#10b981" stroke-width="9"
+                                stroke-linecap="butt" stroke-dasharray="0 226" transform="rotate(-90 50 50)"
+                                style="transition:stroke-dasharray 1.2s cubic-bezier(0.4,0,0.2,1) 0.15s;"/>
+                        <!-- Ecto arc (purple) -->
+                        <circle id="somaArcEcto" cx="50" cy="50" r="36" fill="none" stroke="#8b5cf6" stroke-width="9"
+                                stroke-linecap="butt" stroke-dasharray="0 226" transform="rotate(-90 50 50)"
+                                style="transition:stroke-dasharray 1.2s cubic-bezier(0.4,0,0.2,1) 0.3s;"/>
+                        <!-- Center: dominant label -->
+                        <text id="somaDonutCenter" x="50" y="47" text-anchor="middle" font-size="10"
+                              font-weight="800" font-family="Inter,sans-serif" fill="#0f172a">—</text>
+                        <text x="50" y="58" text-anchor="middle" font-size="6"
+                              font-family="Inter,sans-serif" fill="#94a3b8">dominant</text>
                     </svg>
+                    <!-- Radial legend ticks -->
+                    <div class="soma-donut-legend">
+                        <span class="sdl-endo">Endo</span>
+                        <span class="sdl-meso">Meso</span>
+                        <span class="sdl-ecto">Ecto</span>
+                    </div>
                 </div>
                 <div class="soma-tri-scores">
                     <div class="soma-tri-score endo"><span class="dot"></span>Endo <strong>{{ "%.1f"|format(endo) }}</strong></div>
@@ -575,7 +558,7 @@
                 </div>
             </div>
 
-            <!-- 3D Body Scan Point Cloud -->
+            <!-- 3D Body Scan — Gaussian Splat or Point Cloud -->
             <div class="ai-body-preview" id="plyScanPreview" style="position:relative; cursor:grab;">
                 <canvas id="plyScanCanvas" style="width:100%; height:100%; display:block;"></canvas>
                 <div id="plyScanLoading" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:0.85rem;">
@@ -584,6 +567,23 @@
                         <p style="margin-top:8px;">Loading 3D Scan...</p>
                     </div>
                 </div>
+                <!-- Source badge (Gaussian Splat / Point Cloud) -->
+                <div id="plySourceBadge" style="position:absolute; top:8px; left:8px; font-size:0.62rem; font-weight:700; padding:3px 8px; border-radius:20px; background:rgba(6,182,212,0.12); color:#0891b2; backdrop-filter:blur(4px); z-index:2; letter-spacing:0.04em;">
+                    Point Cloud
+                </div>
+                <!-- Upload PLY -->
+                <input type="file" id="plyFileInput" accept=".ply" style="display:none">
+                <button id="plyUploadBtn" title="Upload PLY file"
+                        style="position:absolute; top:8px; left:50%; transform:translateX(-50%); background:rgba(15,23,42,0.75); border:1px solid rgba(255,255,255,0.15); border-radius:8px; padding:3px 10px; cursor:pointer; display:flex; align-items:center; gap:5px; font-size:0.7rem; font-weight:600; color:#e2e8f0; z-index:2; backdrop-filter:blur(4px); white-space:nowrap;">
+                    &#x1F4C2; Upload PLY
+                </button>
+                <!-- Refresh from GS Colab -->
+                {% if gaussian_url %}
+                <button id="plyRefreshBtn" title="Refresh from Gaussian Splatting Colab"
+                        style="position:absolute; top:8px; right:44px; background:rgba(99,102,241,0.85); border:none; border-radius:8px; width:32px; height:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.9rem; z-index:2; backdrop-filter:blur(4px); color:#fff;">
+                    &#x1F504;
+                </button>
+                {% endif %}
                 <button id="plyScanExpand" title="Expand 3D View" style="position:absolute; top:8px; right:8px; background:rgba(255,255,255,0.85); border:1px solid rgba(0,0,0,0.1); border-radius:8px; width:32px; height:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1rem; z-index:2; backdrop-filter:blur(4px);">&#x26F6;</button>
             </div>
 
@@ -870,7 +870,7 @@
         </div>
 
         <!-- 📅 Weekly Heatmap -->
-        <div class="widget-card widget-heatmap" style="grid-column: span 2;">
+        <div class="widget-card widget-heatmap">
             <div class="widget-header">
                 <span class="widget-icon">📅</span>
                 <span class="widget-title">Activity Heatmap</span>
@@ -890,6 +890,63 @@
                 </div>
                 <span>More</span>
             </div>
+        </div>
+
+        <!-- 😴 Sleep Schedule Tracker -->
+        <div class="widget-card widget-sleep">
+            <div class="widget-header">
+                <span class="widget-icon">&#x1F634;</span>
+                <span class="widget-title">Sleep Tracker</span>
+                <span class="widget-badge">Tonight</span>
+            </div>
+            <div class="sleep-arc-wrap">
+                <svg viewBox="0 0 100 60" class="sleep-arc-svg">
+                    <defs>
+                        <linearGradient id="sleepGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#818cf8"/>
+                            <stop offset="100%" stop-color="#4f46e5"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M8,55 A42,42 0 0,1 92,55" fill="none" stroke="#e5e7eb" stroke-width="8" stroke-linecap="round"/>
+                    <path id="sleepArc" d="M8,55 A42,42 0 0,1 92,55" fill="none" stroke="url(#sleepGrad)"
+                          stroke-width="8" stroke-linecap="round" stroke-dasharray="0 136"
+                          style="transition:stroke-dasharray 1.3s cubic-bezier(0.4,0,0.2,1);"/>
+                    <!-- Hour ticks -->
+                    <line x1="8" y1="55" x2="13" y2="55" stroke="#cbd5e1" stroke-width="1.5"/>
+                    <line x1="50" y1="13" x2="50" y2="19" stroke="#cbd5e1" stroke-width="1.5"/>
+                    <line x1="92" y1="55" x2="87" y2="55" stroke="#cbd5e1" stroke-width="1.5"/>
+                    <text x="8" y="52" text-anchor="middle" fill="#94a3b8" font-size="5" font-family="Inter,sans-serif">0</text>
+                    <text x="50" y="12" text-anchor="middle" fill="#94a3b8" font-size="5" font-family="Inter,sans-serif">5h</text>
+                    <text x="92" y="52" text-anchor="middle" fill="#94a3b8" font-size="5" font-family="Inter,sans-serif">10</text>
+                </svg>
+                <div class="sleep-center-val">
+                    <span class="sleep-hrs" id="sleepHrsDisplay">7.5</span>
+                    <span class="sleep-unit">hrs</span>
+                </div>
+            </div>
+            <div class="sleep-time-row">
+                <div class="sleep-time-item">
+                    <span class="sleep-time-label">Bed</span>
+                    <input type="time" id="sleepBedtime" value="23:00" class="sleep-time-input" onchange="updateSleepTracker()">
+                </div>
+                <span class="sleep-arrow">&#x2192;</span>
+                <div class="sleep-time-item">
+                    <span class="sleep-time-label">Wake</span>
+                    <input type="time" id="sleepWakeup" value="06:30" class="sleep-time-input" onchange="updateSleepTracker()">
+                </div>
+            </div>
+            <div class="sleep-quality-row">
+                <span class="sleep-q-label">Quality</span>
+                <div class="sleep-q-dots" id="sleepQDots">
+                    <div class="sleep-q-dot active" onclick="setSleepQuality(1)" title="Poor"></div>
+                    <div class="sleep-q-dot active" onclick="setSleepQuality(2)" title="Fair"></div>
+                    <div class="sleep-q-dot active" onclick="setSleepQuality(3)" title="Good"></div>
+                    <div class="sleep-q-dot" onclick="setSleepQuality(4)" title="Great"></div>
+                    <div class="sleep-q-dot" onclick="setSleepQuality(5)" title="Excellent"></div>
+                </div>
+                <span class="sleep-q-text" id="sleepQText">Good</span>
+            </div>
+            <div class="widget-footer" id="sleepStatus">Goal: 8 hrs &bull; On track</div>
         </div>
 
         <!-- 🎯 Goal Progress -->
@@ -1093,6 +1150,8 @@
 {% set m_cm = hmr.get('measurements_cm', {}) if hmr is mapping else {} %}
 {% set j_cm = pose.get('joint_lengths_cm', {}) if pose is mapping else {} %}
 {% set ratios = hmr.get('ratios', {}) if hmr is mapping else {} %}
+{% set derived_ratios = hmr.get('derived_ratios', {}) if hmr is mapping else {} %}
+{% set skeletal_ratios = pose.get('skeletal_ratios', {}) if pose is mapping else {} %}
 {% set symmetry = pose.get('symmetry_scores', {}) if pose is mapping else {} %}
 {% set proportions = pose.get('body_proportions', {}) if pose is mapping else {} %}
 
@@ -1109,11 +1168,17 @@
         <h4 class="measurement-group-title">Body Circumferences <span class="measurement-source">HMR Estimation</span></h4>
         <div class="measurements-grid">
             {% for key, label in [
-                ('chest','Chest'), ('waist','Waist'), ('hip','Hip'),
-                ('shoulder','Shoulder Width'), ('upper_arm','Upper Arm (Bicep)'),
-                ('thigh','Thigh'), ('belly','Belly'), ('inseam','Inseam'),
-                ('neck','Neck'), ('forearm','Forearm'), ('calf','Calf'),
-                ('wrist','Wrist'), ('ankle','Ankle')
+                ('chest','Chest'), ('bust','Bust / Chest'),
+                ('waist','Waist'), ('waist_natural','Waist Natural'), ('waist_max','Waist Max'),
+                ('hip','Hip'), ('hips','Hips'), ('hips_max','Hips Max'),
+                ('shoulder','Shoulder Width'), ('shoulder_circumference','Shoulder Circumference'),
+                ('overarm','Overarm (Deltoid)'), ('armscye','Armscye'),
+                ('upper_arm','Upper Arm (Bicep)'), ('forearm','Forearm'),
+                ('wrist','Wrist'), ('neck','Neck'),
+                ('thigh','Thigh'), ('knee_upper','Knee Upper'), ('knee','Knee'),
+                ('calf','Calf'), ('ankle','Ankle'),
+                ('belly','Belly'), ('inseam','Inseam'),
+                ('head','Head Circumference')
             ] %}
             {% if m_cm.get(key) %}
             <div class="measurement-item">
@@ -1138,7 +1203,23 @@
     <div class="measurement-group">
         <h4 class="measurement-group-title">Limb Lengths <span class="measurement-source">MediaPipe Pose</span></h4>
         <div class="measurements-grid">
-            {% for key, label in [('left_upper_arm','L Upper Arm'),('right_upper_arm','R Upper Arm'),('left_forearm','L Forearm'),('right_forearm','R Forearm'),('shoulder_width','Shoulder Width'),('hip_width','Hip Width'),('left_torso','L Torso'),('right_torso','R Torso'),('left_thigh','L Thigh'),('right_thigh','R Thigh'),('left_shin','L Shin'),('right_shin','R Shin')] %}
+            {% for key, label in [
+                ('left_upper_arm','L Upper Arm'), ('right_upper_arm','R Upper Arm'),
+                ('left_forearm','L Forearm'), ('right_forearm','R Forearm'),
+                ('left_arm_total','L Arm Total'), ('right_arm_total','R Arm Total'),
+                ('arm_span','Arm Span'),
+                ('shoulder_width','Shoulder Width'), ('hip_width','Hip Width'),
+                ('head_width','Head Width'), ('ankle_width','Ankle Width'), ('knee_width','Knee Width'),
+                ('left_torso','L Torso'), ('right_torso','R Torso'),
+                ('spine_length','Spine Length'), ('neck_height','Neck Height'),
+                ('upper_body','Upper Body'), ('crotch_height','Crotch Height'),
+                ('left_thigh','L Thigh'), ('right_thigh','R Thigh'),
+                ('left_shin','L Shin'), ('right_shin','R Shin'),
+                ('left_inseam','L Inseam'), ('right_inseam','R Inseam'),
+                ('left_foot','L Foot'), ('right_foot','R Foot'),
+                ('left_hand_width','L Hand Width'), ('right_hand_width','R Hand Width'),
+                ('left_hand_span','L Hand Span'), ('right_hand_span','R Hand Span')
+            ] %}
             {% if j_cm.get(key) %}
             <div class="measurement-item">
                 <div class="measurement-info">
@@ -1163,6 +1244,67 @@
                 <div class="measurement-info">
                     <span class="measurement-label">{{ label }}</span>
                     <span class="measurement-value">{{ "%.3f"|format(ratios[key]) }}</span>
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Skeletal Ratios (MediaPipe) -->
+    {% if skeletal_ratios %}
+    <div class="measurement-group">
+        <h4 class="measurement-group-title">Skeletal Ratios <span class="measurement-source">MediaPipe Pose</span></h4>
+        <div class="measurements-grid">
+            {% for key, label in [
+                ('SHR','Shoulder / Height'), ('HWR','Hip Width / Height'),
+                ('UAG_H','Upper Arm / Height'), ('TG_H','Thigh / Height'),
+                ('LL_H','Leg / Height'), ('FL_H','Foot / Height'),
+                ('AT_H','Arm Total / Height'), ('CI','Cormic Index'),
+                ('ASR','Arm Span / Height'), ('LBR','Leg / Height (Inseam)'),
+                ('ULR','Upper / Lower Body'), ('TLR','Trunk / Leg'),
+                ('HSR','Head / Shoulder Width'), ('AII','V-Taper Index')
+            ] %}
+            {% if skeletal_ratios.get(key) is not none and skeletal_ratios.get(key) %}
+            <div class="measurement-item ratio">
+                <div class="measurement-info">
+                    <span class="measurement-label">{{ label }}</span>
+                    <span class="measurement-value">{{ "%.4f"|format(skeletal_ratios[key]) }}</span>
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Derived Health Indices -->
+    {% if derived_ratios %}
+    <div class="measurement-group">
+        <h4 class="measurement-group-title">Health Indices <span class="measurement-source">Calculated</span></h4>
+        <div class="measurements-grid">
+            {% for key, label, fmt in [
+                ('waist_hip_ratio',      'Waist-to-Hip Ratio',         '%.3f'),
+                ('WHtR',                 'Waist-to-Height Ratio',       '%.3f'),
+                ('chest_waist_ratio',    'Chest / Waist',               '%.3f'),
+                ('shoulder_waist_ratio', 'Shoulder / Waist',            '%.3f'),
+                ('calf_thigh_ratio',     'Calf / Thigh',                '%.3f'),
+                ('arm_height_ratio',     'Arm / Height',                '%.3f'),
+                ('cormic_index',         'Cormic Index',                '%.3f'),
+                ('foot_height_ratio',    'Foot / Height',               '%.3f'),
+                ('hip_width_height_ratio','Hip Width / Height',         '%.3f'),
+                ('body_fat_pct_estimated','Body Fat % (est.)',          '%.1f'),
+                ('BSA_m2',               'Body Surface Area (m²)',      '%.3f'),
+                ('lean_body_mass_kg',    'Lean Body Mass (kg)',         '%.1f'),
+                ('ABSI',                 'ABSI',                        '%.4f'),
+                ('BRI',                  'Body Roundness Index',        '%.2f')
+            ] %}
+            {% if derived_ratios.get(key) is not none and derived_ratios.get(key) %}
+            <div class="measurement-item ratio">
+                <div class="measurement-info">
+                    <span class="measurement-label">{{ label }}</span>
+                    <span class="measurement-value">{{ fmt|format(derived_ratios[key]) }}</span>
                 </div>
             </div>
             {% endif %}
@@ -1292,11 +1434,13 @@
 {% block scripts %}
 {% if data and data.latest_scan %}
 <script>
+    window.__FITSCAN_RENDER_TS = Date.now();
     const SCAN_DATA    = {{ data.latest_scan | tojson }};
     const PROFILE_DATA = {{ (data.profile or {}) | tojson }};
     const TARGET_MUSCLES = {{ data.target_muscles | tojson }};
     const GOALS_DATA   = {{ (data.goals or []) | tojson }};
     const USER_NAME    = {{ session.get('user_name', 'User') | tojson }};
+    const GAUSSIAN_URL = {{ gaussian_url | tojson }};
 </script>
 <script src="/static/js/body-hotspots.js"></script>
 <script src="/static/js/dashboard.js"></script>
@@ -1332,9 +1476,15 @@
 </script>
 {% endif %}
 
-<!-- Three.js for 3D Point Cloud -->
+<!-- Three.js for local point cloud + FBX anatomy viewer -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="/static/js/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
+<script src="/static/js/fflate.js"></script>
+<script src="/static/js/FBXLoader.patched.js"></script>
 <script src="/static/js/ply-viewer.js"></script>
+{% if data and data.latest_scan %}
+<script src="/static/js/body-model.js"></script>
+<script src="/static/js/body-type-viewer.js"></script>
+{% endif %}
 {% endblock %}

@@ -15,17 +15,18 @@
 <!-- INPUT FORM -->
 <form id="classifyForm" enctype="multipart/form-data">
     <div class="card">
-        <h2>📸 Photo</h2>
+        <h2>&#x1F3AC; Input</h2>
         <div class="tab-row">
-            <div class="tab-btn active" id="tabCam" onclick="switchTab('cam')">📷 Webcam</div>
-            <div class="tab-btn" id="tabUpload" onclick="switchTab('upload')">📁 Upload File</div>
+            <div class="tab-btn" id="tabCam" onclick="switchTab('cam')">&#x1F4F7; Webcam</div>
+            <div class="tab-btn" id="tabUpload" onclick="switchTab('upload')">&#x1F4C1; Image</div>
+            <div class="tab-btn active" id="tabVideo" onclick="switchTab('video')">&#x1F3AC; Video</div>
         </div>
 
         <!-- Webcam panel -->
-        <div id="panelCam">
+        <div id="panelCam" style="display:none">
             <div class="cam-box">
                 <div class="cam-placeholder" id="camPlaceholder">
-                    <div class="icon">📷</div>
+                    <div class="icon">&#x1F4F7;</div>
                     <div class="text">Click "Start Camera" — photo taken in 5 seconds</div>
                 </div>
                 <video id="videoEl" autoplay playsinline></video>
@@ -34,19 +35,118 @@
                 <div class="capture-flash" id="captureFlash"></div>
             </div>
             <div class="cam-controls">
-                <button type="button" id="btnStartCam" onclick="startCamera()">▶ Start Camera</button>
-                <button type="button" id="btnRetake" onclick="retakePhoto()">↩ Retake</button>
+                <button type="button" id="btnStartCam" onclick="startCamera()">&#x25B6; Start Camera</button>
+                <button type="button" id="btnRetake" onclick="retakePhoto()">&#x21A9; Retake</button>
             </div>
         </div>
 
-        <!-- Upload panel -->
+        <!-- Image upload panel -->
         <div id="panelUpload" style="display:none">
             <div class="upload-zone shown" onclick="document.getElementById('imageInput').click()">
                 <input type="file" id="imageInput" accept="image/*">
-                <div class="icon">📁</div>
+                <div class="icon">&#x1F4C1;</div>
                 <div class="text">Click to upload a full-body front-facing photo</div>
                 <div class="filename" id="fileName"></div>
                 <img class="preview-img" id="imagePreview" style="display:none">
+            </div>
+        </div>
+
+        <!-- Video upload panel -->
+        <div id="panelVideo">
+            <div class="upload-zone shown video-upload-zone" id="videoDropZone"
+                 onclick="document.getElementById('videoInput').click()">
+                <input type="file" id="videoInput" accept="video/mp4,video/mov,video/webm,video/avi,video/*" style="display:none">
+                <div class="icon" id="videoDropIcon">&#x1F3AC;</div>
+                <div class="text" id="videoDropText">Click to upload a rotation video<br>
+                    <small style="color:var(--text-dim);">Slowly rotate 360° while recording &bull; MP4 / MOV / WebM</small>
+                </div>
+            </div>
+
+            <div id="videoPreviewWrap" style="display:none; margin-top:14px;">
+                <video id="videoPlayer" controls preload="metadata"
+                       style="width:100%; max-height:240px; border-radius:12px; background:#000; display:block;"></video>
+
+                <!-- Multi-view auto-extract (primary) -->
+                <button type="button" id="btnAutoExtract" onclick="autoExtractViews()"
+                        class="btn" style="width:100%; margin-top:12px;">
+                    &#x1F50D; Auto-Extract 3 Views (Front / Side / 45&deg;)
+                </button>
+
+                <!-- Manual fallback -->
+                <details style="margin-top:10px;">
+                    <summary style="cursor:pointer; font-size:0.78rem; color:var(--text-muted); padding:4px 0;">
+                        &#x1F527; Manual frame capture (fallback)
+                    </summary>
+                    <div style="padding-top:10px;">
+                        <div class="video-frame-picker">
+                            <div class="vfp-label">
+                                <span>&#x1F4CD; Pick frame for HMR analysis</span>
+                                <span class="vfp-time" id="frameTimeDisplay">0.0 s</span>
+                            </div>
+                            <input type="range" id="frameScrubber" min="0" max="100" step="0.01" value="50"
+                                   class="frame-scrubber" oninput="scrubVideoFrame(this.value)">
+                            <div class="vfp-ends">
+                                <span>0 s</span><span id="videoTotalTime">— s</span>
+                            </div>
+                        </div>
+                        <button type="button" onclick="captureVideoFrame()" class="btn btn-sm"
+                                style="width:100%; margin-top:10px;">
+                            &#x1F4F8; Capture Frame for Body Analysis
+                        </button>
+                    </div>
+                </details>
+            </div>
+
+            <!-- Auto-extract progress -->
+            <div id="videoExtractProgress" style="display:none; margin-top:12px;
+                 padding:12px 16px; background:rgba(99,102,241,0.08); border-radius:10px;
+                 border:1px solid rgba(99,102,241,0.2); font-size:0.83rem; color:#a78bfa;">
+                <span id="videoExtractMsg">&#x23F3; Extracting views from video...</span>
+            </div>
+
+            <!-- 3-view thumbnails after auto-extract -->
+            <div id="videoViewsExtracted" style="display:none; margin-top:14px;">
+                <div style="color:var(--green, #10b981); font-weight:700; font-size:0.88rem; margin-bottom:10px;">
+                    &#x2705; 3 views extracted &mdash; ready for multi-view analysis
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+                    <div style="text-align:center;">
+                        <img id="thumbFront" style="width:100%; border-radius:8px; border:2px solid var(--green,#10b981);">
+                        <div style="font-size:0.72rem; margin-top:4px; color:var(--text-muted);">Front</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <img id="thumbSide" style="width:100%; border-radius:8px; border:1.5px solid var(--border-light);">
+                        <div style="font-size:0.72rem; margin-top:4px; color:var(--text-muted);">Side</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <img id="thumbDiag" style="width:100%; border-radius:8px; border:1.5px solid var(--border-light);">
+                        <div style="font-size:0.72rem; margin-top:4px; color:var(--text-muted);">45&deg;</div>
+                    </div>
+                </div>
+                <button type="button" onclick="resetVideoCapture()"
+                        style="margin-top:8px; font-size:0.72rem; color:var(--text-muted); background:none;
+                               border:1.5px solid var(--border-light); border-radius:8px; padding:4px 12px; cursor:pointer;">
+                    &#x21A9; Re-extract
+                </button>
+                {% if gaussian_url %}
+                <div style="margin-top:10px; padding:10px 14px; background:rgba(99,102,241,0.08); border-radius:10px; border:1px solid rgba(99,102,241,0.2); font-size:0.78rem; color:#6366f1;">
+                    &#x1F300; Full video will also be sent to Gaussian Splatting Colab for 3D reconstruction.
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Legacy single-frame captured state -->
+            <div id="videoFrameCaptured" style="display:none; margin-top:12px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                    <span style="color:var(--green, #10b981); font-weight:700; font-size:0.88rem;">
+                        Frame captured &mdash; ready for HMR
+                    </span>
+                    <button type="button" onclick="resetVideoCapture()"
+                            style="font-size:0.7rem; color:var(--text-muted); background:none; border:1.5px solid var(--border-light); border-radius:8px; padding:3px 10px; cursor:pointer;">
+                        Change frame
+                    </button>
+                </div>
+                <img id="videoFramePreview" style="max-width:100%; border-radius:10px; border:2px solid var(--green, #10b981);">
             </div>
         </div>
     </div>
@@ -179,17 +279,42 @@
         </table>
     </div>
 
+    {% if gaussian_url %}
+    <!-- Gaussian Splatting Status -->
+    <div id="gsStatusCard" style="display:none; margin-top:20px; padding:16px 20px;
+         background:rgba(99,102,241,0.08); border:1.5px solid rgba(99,102,241,0.25);
+         border-radius:14px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+            <span id="gsStatusIcon" style="font-size:1.3rem;">&#x23F3;</span>
+            <span style="font-weight:700; color:#6366f1; font-size:0.95rem;">3D Gaussian Splatting</span>
+            <span id="gsStatusBadge" style="margin-left:auto; font-size:0.72rem; font-weight:600;
+                  padding:3px 10px; border-radius:20px;
+                  background:rgba(99,102,241,0.15); color:#6366f1;">Sending...</span>
+        </div>
+        <div id="gsStatusMsg" style="font-size:0.82rem; color:var(--text-muted,#94a3b8); line-height:1.5;">
+            Uploading video to Gaussian Splatting Colab...
+        </div>
+        <div id="gsProgressBar" style="margin-top:10px; height:4px; border-radius:4px;
+             background:rgba(99,102,241,0.12); overflow:hidden; display:none;">
+            <div id="gsProgressFill" style="height:100%; width:15%; border-radius:4px;
+                 background:linear-gradient(90deg,#6366f1,#a78bfa);
+                 transition:width 0.6s ease;"></div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Action buttons after scan -->
     <div style="display:flex; gap:12px; margin-top:24px;">
-        <a href="/dashboard" class="btn" style="text-decoration:none; text-align:center;">📊 View Dashboard</a>
-        <button class="btn btn-outline" onclick="window.scrollTo({top:0,behavior:'smooth'}); document.getElementById('resultsSection').classList.remove('active');">🔄 Scan Again</button>
+        <a href="/dashboard" class="btn" style="text-decoration:none; text-align:center;">&#x1F4CA; View Dashboard</a>
+        <button class="btn btn-outline" onclick="window.scrollTo({top:0,behavior:'smooth'}); document.getElementById('resultsSection').classList.remove('active');">&#x1F504; Scan Again</button>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    const COLAB = "{{ colab_url }}";
+    const COLAB    = "{{ colab_url }}";
+    const GAUSSIAN = "{{ gaussian_url }}";
 </script>
 <script src="/static/js/scan.js"></script>
 {% endblock %}

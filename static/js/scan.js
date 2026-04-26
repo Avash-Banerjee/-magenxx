@@ -5,33 +5,51 @@
 
 let timerInterval;
 
+async function readJsonResponse(response, label) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+        return response.json();
+    }
+
+    const text = await response.text();
+    const preview = text.replace(/\s+/g, " ").slice(0, 180);
+    throw new Error(`${label} returned HTML/non-JSON (${response.status}). ${preview}`);
+}
+
 // ── Check Colab connection ──
 async function checkStatus() {
     const dot = document.getElementById("statusDot");
     const text = document.getElementById("statusText");
     try {
-        const r = await fetch(COLAB + "/", {
-            headers: { "ngrok-skip-browser-warning": "true" }
-        });
-        if (r.ok) {
+        const r = await fetch("/api/hmr/status");
+        const data = await readJsonResponse(r, "HMR status");
+        if (data.available) {
             dot.className = "status-dot online";
             text.textContent = "Colab GPU connected";
-        } else throw new Error();
-    } catch {
+        } else {
+            throw new Error(data.reason || "HMR Colab is not reachable");
+        }
+    } catch (err) {
         dot.className = "status-dot offline";
+        if (err && err.message) {
+            text.textContent = err.message;
+            return;
+        }
         text.textContent = "Colab not reachable — is the server cell running?";
     }
 }
 checkStatus();
 
 // ── Tab switching ──
-let currentTab = "cam";
+let currentTab = "video";
 function switchTab(tab) {
     currentTab = tab;
-    document.getElementById("tabCam").classList.toggle("active", tab === "cam");
-    document.getElementById("tabUpload").classList.toggle("active", tab === "upload");
-    document.getElementById("panelCam").style.display    = tab === "cam"    ? "block" : "none";
-    document.getElementById("panelUpload").style.display = tab === "upload" ? "block" : "none";
+    ["cam", "upload", "video"].forEach(t => {
+        const btn   = document.getElementById("tab" + t.charAt(0).toUpperCase() + t.slice(1));
+        const panel = document.getElementById("panel" + t.charAt(0).toUpperCase() + t.slice(1));
+        if (btn)   btn.classList.toggle("active", t === tab);
+        if (panel) panel.style.display = (t === tab) ? "block" : "none";
+    });
 }
 
 // ── Webcam ──
@@ -105,7 +123,7 @@ function retakePhoto() {
     document.getElementById("btnRetake").style.display = "none";
 }
 
-// ── File upload preview ──
+// ── Image file upload preview ──
 document.getElementById("imageInput").addEventListener("change", function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -118,6 +136,211 @@ document.getElementById("imageInput").addEventListener("change", function(e) {
     };
     reader.readAsDataURL(file);
 });
+
+// ── Video upload + frame extraction ──
+let videoFile = null;
+let videoFrameBlob = null;      // legacy single-frame fallback
+let videoMultiviewResult = null; // {colab, pose, views, frames_sampled}
+
+document.getElementById("videoInput").addEventListener("change", function(e) {
+    videoFile = e.target.files[0];
+    if (!videoFile) return;
+
+    const zone = document.getElementById("videoDropZone");
+    const icon = document.getElementById("videoDropIcon");
+    const text = document.getElementById("videoDropText");
+    if (icon) icon.textContent = "✅";
+    if (text) text.innerHTML = `<strong>${videoFile.name}</strong><br><small style="color:var(--text-dim);">${(videoFile.size / 1024 / 1024).toFixed(1)} MB</small>`;
+    if (zone) zone.style.borderColor = "var(--green, #10b981)";
+
+    const player = document.getElementById("videoPlayer");
+    player.src = URL.createObjectURL(videoFile);
+    player.load();
+
+    player.onloadedmetadata = function() {
+        const dur = player.duration;
+        document.getElementById("videoTotalTime").textContent = dur.toFixed(1) + " s";
+        const scrubber = document.getElementById("frameScrubber");
+        scrubber.max = dur;
+        const autoTime = dur * 0.4;
+        scrubber.value = autoTime;
+        player.currentTime = autoTime;
+    };
+
+    document.getElementById("videoPreviewWrap").style.display = "block";
+    document.getElementById("videoFrameCaptured").style.display = "none";
+    document.getElementById("videoViewsExtracted").style.display = "none";
+    document.getElementById("videoExtractProgress").style.display = "none";
+    videoFrameBlob = null;
+    videoMultiviewResult = null;
+});
+
+function scrubVideoFrame(val) {
+    const player = document.getElementById("videoPlayer");
+    if (player) {
+        player.currentTime = parseFloat(val);
+        const label = document.getElementById("frameTimeDisplay");
+        if (label) label.textContent = parseFloat(val).toFixed(2) + " s";
+    }
+}
+
+function captureVideoFrame() {
+    const player = document.getElementById("videoPlayer");
+    if (!player || !player.videoWidth) {
+        alert("Video not loaded yet. Please wait.");
+        return;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width  = player.videoWidth;
+    canvas.height = player.videoHeight;
+    canvas.getContext("2d").drawImage(player, 0, 0);
+
+    canvas.toBlob(blob => {
+        videoFrameBlob = blob;
+        videoMultiviewResult = null;
+        const preview = document.getElementById("videoFramePreview");
+        preview.src = URL.createObjectURL(blob);
+
+        document.getElementById("videoPreviewWrap").style.display = "none";
+        document.getElementById("videoFrameCaptured").style.display = "block";
+        document.getElementById("videoViewsExtracted").style.display = "none";
+    }, "image/jpeg", 0.93);
+}
+
+async function autoExtractViews() {
+    if (!videoFile) { alert("Please upload a video first."); return; }
+    const height = document.getElementById("heightInput").value;
+    const weight = document.getElementById("weightInput").value;
+    if (!height || !weight) { alert("Enter height and weight first."); return; }
+
+    const btn = document.getElementById("btnAutoExtract");
+    const progress = document.getElementById("videoExtractProgress");
+    const msgEl = document.getElementById("videoExtractMsg");
+    btn.disabled = true;
+    progress.style.display = "block";
+    msgEl.textContent = "⏳ Uploading video and extracting 3 views...";
+
+    try {
+        const fd = new FormData();
+        fd.append("video", videoFile, videoFile.name);
+        fd.append("height_cm", height);
+        fd.append("weight_kg", weight);
+
+        msgEl.textContent = "⏳ Running MediaPipe on all frames (~10–30s depending on video length)...";
+        const resp = await fetch("/api/analyze/video", { method: "POST", body: fd });
+        const data = await readJsonResponse(resp, "Video analysis");
+
+        if (!resp.ok || data.error) {
+            throw new Error(data.error || "Video analysis failed");
+        }
+
+        videoMultiviewResult = data;
+        videoFrameBlob = null;
+
+        // Show thumbnails
+        if (data.views) {
+            document.getElementById("thumbFront").src = data.views.front.frame_b64;
+            document.getElementById("thumbSide").src  = data.views.side.frame_b64;
+            document.getElementById("thumbDiag").src  = data.views.diagonal.frame_b64;
+        }
+
+        progress.style.display = "none";
+        document.getElementById("videoPreviewWrap").style.display = "none";
+        document.getElementById("videoViewsExtracted").style.display = "block";
+        document.getElementById("videoFrameCaptured").style.display = "none";
+
+        if (data.colab) {
+            msgEl.textContent = `✅ 3-view HMR complete (${data.frames_sampled} frames sampled)`;
+        } else {
+            msgEl.textContent = `✅ Views extracted (${data.frames_sampled} frames). Colab not connected — HMR skipped.`;
+        }
+    } catch (err) {
+        progress.style.display = "none";
+        alert("View extraction failed: " + err.message);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function resetVideoCapture() {
+    videoFrameBlob = null;
+    videoMultiviewResult = null;
+    document.getElementById("videoFrameCaptured").style.display = "none";
+    document.getElementById("videoViewsExtracted").style.display = "none";
+    document.getElementById("videoExtractProgress").style.display = "none";
+    document.getElementById("videoPreviewWrap").style.display = "block";
+}
+
+// ── Gaussian Splatting status UI helpers ──
+function _gsCard()   { return document.getElementById("gsStatusCard"); }
+function _gsIcon()   { return document.getElementById("gsStatusIcon"); }
+function _gsBadge()  { return document.getElementById("gsStatusBadge"); }
+function _gsMsg()    { return document.getElementById("gsStatusMsg"); }
+function _gsBar()    { return document.getElementById("gsProgressBar"); }
+function _gsFill()   { return document.getElementById("gsProgressFill"); }
+
+const GS_STAGE_PCT = { queued:10, extracting:20, colmap:40, undistorting:60, training:75, exporting:92, done:100 };
+
+function _gsSetState(icon, badge, badgeColor, msg, pct) {
+    const card = _gsCard(); if (!card) return;
+    card.style.display = "block";
+    _gsIcon().textContent  = icon;
+    _gsBadge().textContent = badge;
+    _gsBadge().style.background = badgeColor + "22";
+    _gsBadge().style.color      = badgeColor;
+    _gsMsg().textContent   = msg;
+    if (pct !== null) {
+        _gsBar().style.display = "block";
+        _gsFill().style.width  = pct + "%";
+    }
+}
+
+let _gsPollTimer = null;
+function _startGsPoll() {
+    if (_gsPollTimer) clearInterval(_gsPollTimer);
+    _gsPollTimer = setInterval(async () => {
+        try {
+            const r    = await fetch("/api/gaussian/status");
+            const data = await r.json();
+            const st   = data.status || "idle";
+            const stage = data.stage || (data.data && data.data.stage) || st;
+            const pct  = GS_STAGE_PCT[stage] || GS_STAGE_PCT[st] || 15;
+
+            if ((st === "done" || data.available) && data.output_ready) {
+                clearInterval(_gsPollTimer); _gsPollTimer = null;
+                _gsSetState("✅", "Done", "#10b981",
+                    "3D model ready! Open the Dashboard to view your Gaussian Splat.", 100);
+            } else if (st === "error") {
+                clearInterval(_gsPollTimer); _gsPollTimer = null;
+                const errMsg = data.error || (data.data && data.data.error) || "Pipeline failed";
+                _gsSetState("❌", "Error", "#ef4444", "GS error: " + errMsg, null);
+            } else if (st === "processing") {
+                const stageLabel = (stage || "processing").charAt(0).toUpperCase() + (stage || "processing").slice(1);
+                _gsSetState("⚙️", stageLabel, "#6366f1",
+                    "Pipeline running — stage: " + stageLabel + ". This takes ~10–15 min on T4 GPU.", pct);
+            }
+        } catch(e) { /* ignore poll errors */ }
+    }, 12000); // poll every 12s
+}
+
+async function triggerGaussianColab(file) {
+    if (!GAUSSIAN || !file) return;
+    _gsSetState("⏫", "Sending...", "#6366f1", "Uploading video to Gaussian Splatting Colab...", 5);
+    try {
+        const fd = new FormData();
+        fd.append("video", file, file.name || "scan.mp4");
+        const r = await fetch("/api/gaussian/trigger", { method: "POST", body: fd });
+        if (r.ok) {
+            _gsSetState("⚙️", "Processing", "#6366f1",
+                "Video received by Colab. Pipeline starting... (~10–15 min on T4 GPU)", 10);
+            _startGsPoll();
+        } else {
+            _gsSetState("❌", "Failed", "#ef4444", "Could not send video to GS Colab. Check GAUSSIAN_COLAB_URL in .env.", null);
+        }
+    } catch(e) {
+        _gsSetState("❌", "Failed", "#ef4444", "Network error: " + e.message, null);
+    }
+}
 
 // ── Symmetry bars ──
 function renderSymmetry(symmetry) {
@@ -164,20 +387,35 @@ async function saveScanResults(poseData, colabData) {
         annotated_image: poseData.annotated_image_base64 || "",
     };
 
-    try {
-        await apiPost("/api/scan/save", scanData);
-    } catch (err) {
-        console.error("Failed to save scan:", err);
+    // Direct fetch w/ cache-bust + awaited error propagation.
+    const resp = await fetch("/api/scan/save", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+        },
+        cache: "no-store",
+        body: JSON.stringify(scanData),
+    });
+    if (!resp.ok) {
+        const txt = await resp.text().catch(() => "");
+        throw new Error(`Save failed (${resp.status}): ${txt.slice(0, 180)}`);
     }
+    const out = await resp.json();
+    try {
+        sessionStorage.setItem("fitscan_new_scan", String(Date.now()));
+        if (out && out.scan_id) sessionStorage.setItem("fitscan_last_scan_id", String(out.scan_id));
+    } catch (_) {}
+    return out;
 }
 
 // ── Form submit ──
 document.getElementById("classifyForm").addEventListener("submit", async function(e) {
     e.preventDefault();
 
-    const usingCam = currentTab === "cam";
-    if (usingCam && !capturedBlob) { alert("Please capture a photo first."); return; }
-    if (!usingCam && !document.getElementById("imageInput").files[0]) { alert("Please upload an image."); return; }
+    if (currentTab === "cam"    && !capturedBlob)  { alert("Please capture a photo first."); return; }
+    if (currentTab === "upload" && !document.getElementById("imageInput").files[0]) { alert("Please upload an image."); return; }
+    if (currentTab === "video"  && !videoFrameBlob && !videoMultiviewResult) { alert("Please extract views from the video first (or capture a frame manually)."); return; }
 
     const btn = document.getElementById("submitBtn");
     const loading = document.getElementById("loadingSection");
@@ -200,55 +438,73 @@ document.getElementById("classifyForm").addEventListener("submit", async functio
     timerInterval = setInterval(() => { seconds++; timerEl.textContent = seconds + "s"; }, 1000);
 
     try {
-        // Build form data
-        const formData = new FormData();
-        if (usingCam) {
-            formData.append("image", capturedBlob, "webcam.jpg");
+        let poseData, colabData;
+
+        // ── Multi-view shortcut: auto-extract already ran Colab ──
+        if (currentTab === "video" && videoMultiviewResult && videoMultiviewResult.colab) {
+            poseData  = videoMultiviewResult.pose;
+            colabData = videoMultiviewResult.colab;
+
+            document.getElementById("stepPose").className = "step done";
+            document.getElementById("stepPose").textContent = "✅ Step 1: Multi-view pose analysis complete";
+            document.getElementById("stepColab").className = "step done";
+            document.getElementById("stepColab").textContent =
+                `✅ Step 2: HMR complete (3-view average, ${videoMultiviewResult.frames_sampled} frames sampled)`;
+
         } else {
-            formData.append("image", document.getElementById("imageInput").files[0]);
+            // ── Single-image path (webcam / upload / manual frame) ──
+
+            // Build form data
+            const formData = new FormData();
+            if (currentTab === "cam") {
+                formData.append("image", capturedBlob, "webcam.jpg");
+            } else if (currentTab === "video") {
+                formData.append("image", videoFrameBlob, "video_frame.jpg");
+            } else {
+                formData.append("image", document.getElementById("imageInput").files[0]);
+            }
+            formData.append("height_cm", document.getElementById("heightInput").value);
+            formData.append("weight_kg", document.getElementById("weightInput").value);
+
+            // ── STEP 1: Local pose analysis ──
+            const poseResp = await fetch("/api/analyze", { method: "POST", body: formData });
+            poseData = await readJsonResponse(poseResp, "Local pose analysis");
+            if (!poseResp.ok || poseData.error) {
+                throw new Error(poseData.error || "Local pose analysis failed");
+            }
+
+            document.getElementById("stepPose").className = "step done";
+            document.getElementById("stepPose").textContent = "✅ Step 1: Pose analysis complete";
+            document.getElementById("stepColab").className = "step active";
+            document.getElementById("stepColab").textContent = "⏳ Step 2: HMR Inference on Colab GPU (~30s)...";
+
+            // ── STEP 2: Colab HMR classification ──
+            const formData2 = new FormData();
+            if (currentTab === "cam") {
+                formData2.append("image", capturedBlob, "webcam.jpg");
+            } else if (currentTab === "video") {
+                formData2.append("image", videoFrameBlob, "video_frame.jpg");
+            } else {
+                formData2.append("image", document.getElementById("imageInput").files[0]);
+            }
+            formData2.append("height_cm", document.getElementById("heightInput").value);
+            formData2.append("weight_kg", document.getElementById("weightInput").value);
+
+            if (poseData.skeletal_ratios) {
+                formData2.append("mp_ratios", JSON.stringify(poseData.skeletal_ratios));
+            }
+
+            const colabResp = await fetch("/api/hmr/classify", { method: "POST", body: formData2 });
+            colabData = await readJsonResponse(colabResp, "HMR classification");
+
+            if (!colabResp.ok || colabData.error) {
+                const details = colabData.body_preview ? ": " + colabData.body_preview : "";
+                throw new Error((colabData.error || "Colab returned an error") + details);
+            }
+
+            document.getElementById("stepColab").className = "step done";
+            document.getElementById("stepColab").textContent = "✅ Step 2: HMR classification complete";
         }
-        formData.append("height_cm", document.getElementById("heightInput").value);
-        formData.append("weight_kg", document.getElementById("weightInput").value);
-
-        // ── STEP 1: Local pose analysis ──
-        const poseResp = await fetch("/api/analyze", {
-            method: "POST",
-            body: formData
-        });
-        const poseData = await poseResp.json();
-
-        document.getElementById("stepPose").className = "step done";
-        document.getElementById("stepPose").textContent = "✅ Step 1: Pose analysis complete";
-        document.getElementById("stepColab").className = "step active";
-        document.getElementById("stepColab").textContent = "⏳ Step 2: HMR Inference on Colab GPU (~30s)...";
-
-        // ── STEP 2: Colab HMR classification ──
-        const formData2 = new FormData();
-        if (usingCam) {
-            formData2.append("image", capturedBlob, "webcam.jpg");
-        } else {
-            formData2.append("image", document.getElementById("imageInput").files[0]);
-        }
-        formData2.append("height_cm", document.getElementById("heightInput").value);
-        formData2.append("weight_kg", document.getElementById("weightInput").value);
-
-        if (poseData.skeletal_ratios) {
-            formData2.append("mp_ratios", JSON.stringify(poseData.skeletal_ratios));
-        }
-
-        const colabResp = await fetch(COLAB + "/classify", {
-            method: "POST",
-            body: formData2,
-            headers: { "ngrok-skip-browser-warning": "true" }
-        });
-        const colabData = await colabResp.json();
-
-        if (!colabResp.ok || colabData.error) {
-            throw new Error(colabData.error || "Colab returned an error");
-        }
-
-        document.getElementById("stepColab").className = "step done";
-        document.getElementById("stepColab").textContent = "✅ Step 2: HMR classification complete";
 
         // ════════════════════════════
         //   POPULATE RESULTS
@@ -377,8 +633,22 @@ document.getElementById("classifyForm").addEventListener("submit", async functio
 
         results.classList.add("active");
 
-        // Save to DB
-        saveScanResults(poseData, colabData);
+        // Save to DB — awaited so Dashboard sees the new scan
+        try {
+            await saveScanResults(poseData, colabData);
+            const banner = document.createElement("div");
+            banner.style.cssText = "margin-top:12px;padding:10px 14px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.35);border-radius:10px;color:#10b981;font-size:0.85rem;font-weight:600;";
+            banner.textContent = "✅ Scan saved. Open Dashboard to view updated results.";
+            results.appendChild(banner);
+        } catch (saveErr) {
+            errorBox.textContent = "⚠ Scan analysis succeeded but saving to DB failed: " + saveErr.message;
+            errorBox.classList.add("active");
+        }
+
+        // Trigger Gaussian Splatting Colab in background (video tab only)
+        if (currentTab === "video" && videoFile) {
+            triggerGaussianColab(videoFile);
+        }
 
     } catch (err) {
         errorBox.textContent = "❌ " + err.message;

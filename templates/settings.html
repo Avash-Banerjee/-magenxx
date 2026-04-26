@@ -178,7 +178,7 @@
                     <div class="settings-field">
                         <label>Diet Type</label>
                         <select id="s_diet_type">
-                            {% for d in ['non_veg','veg','vegan','keto','paleo','mediterranean'] %}
+                            {% for d in ['non_veg','veg','vegan','keto','paleo','mediterranean','okinawan'] %}
                             <option value="{{ d }}" {{ 'selected' if diet.diet_type == d }}>{{ d.replace('_',' ').title() }}</option>
                             {% endfor %}
                         </select>

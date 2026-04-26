@@ -1935,6 +1935,47 @@ h1.left { text-align: left; }
 .upload-zone .filename { color: var(--accent-1); font-weight: 600; margin-top: 8px; }
 .preview-img { max-width: 200px; max-height: 280px; border-radius: var(--radius-sm); margin-top: 12px; }
 
+/* ── Video Upload Zone ── */
+.video-upload-zone { cursor: pointer; }
+.video-upload-zone:hover { border-color: #6366f1; background: rgba(99,102,241,0.04); }
+
+/* ── Video Frame Picker ── */
+.video-frame-picker {
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: var(--bg-input, #f8fafc);
+    border: 1.5px solid var(--border-light, #e5e7eb);
+    border-radius: 12px;
+}
+.vfp-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted, #64748b);
+    margin-bottom: 8px;
+}
+.vfp-time {
+    font-size: 0.75rem;
+    color: #6366f1;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.frame-scrubber {
+    width: 100%;
+    accent-color: #6366f1;
+    cursor: pointer;
+    height: 4px;
+}
+.vfp-ends {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.65rem;
+    color: var(--text-dim, #94a3b8);
+    margin-top: 4px;
+}
+
 /* ── Loading ── */
 .loading { display: none; text-align: center; padding: 40px; }
 .loading.active { display: block; }
@@ -3144,6 +3185,54 @@ h1.left { text-align: left; }
 }
 .heatmap-legend-cells { display: flex; gap: 3px; }
 .heatmap-legend-cells div { width: 12px; height: 12px; border-radius: 2px; }
+
+/* ── Sleep Tracker Widget ── */
+.widget-sleep {}
+.sleep-arc-wrap { position: relative; display: flex; justify-content: center; margin: 6px 0 4px; }
+.sleep-arc-svg { width: 100%; max-width: 130px; }
+.sleep-center-val {
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: baseline; gap: 2px;
+}
+.sleep-hrs { font-size: 1.4rem; font-weight: 800; color: #4f46e5; line-height: 1; }
+.sleep-unit { font-size: 0.65rem; color: #94a3b8; font-weight: 600; }
+.sleep-time-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 6px; margin: 10px 0 8px;
+}
+.sleep-time-item { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
+.sleep-time-label { font-size: 0.62rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.sleep-time-input {
+    width: 100%; font-size: 0.78rem; font-weight: 700; text-align: center;
+    border: 1.5px solid var(--border-light, #e5e7eb); border-radius: 8px;
+    padding: 5px 4px; background: var(--bg-input, #f8fafc); color: var(--text-primary, #0f172a);
+    cursor: pointer; outline: none;
+}
+.sleep-time-input:focus { border-color: #818cf8; }
+.sleep-arrow { font-size: 0.85rem; color: #cbd5e1; flex-shrink: 0; }
+.sleep-quality-row { display: flex; align-items: center; gap: 6px; }
+.sleep-q-label { font-size: 0.65rem; color: #94a3b8; font-weight: 600; flex-shrink: 0; }
+.sleep-q-dots { display: flex; gap: 4px; flex: 1; }
+.sleep-q-dot {
+    width: 14px; height: 14px; border-radius: 50%; background: #e5e7eb;
+    cursor: pointer; transition: background .2s, transform .15s;
+    flex-shrink: 0;
+}
+.sleep-q-dot.active { background: #6366f1; }
+.sleep-q-dot:hover { transform: scale(1.2); }
+.sleep-q-text { font-size: 0.65rem; font-weight: 700; color: #6366f1; flex-shrink: 0; min-width: 44px; text-align: right; }
+
+/* ── Somatotype Donut ── */
+.soma-donut-wrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.soma-donut-svg { width: 100%; max-width: 160px; }
+.soma-donut-legend {
+    display: flex; justify-content: space-between; width: 100%; max-width: 160px;
+    font-size: 0.6rem; font-weight: 700; letter-spacing: 0.03em;
+    padding: 0 4px;
+}
+.sdl-endo { color: #ef4444; }
+.sdl-meso { color: #10b981; text-align: center; flex: 1; }
+.sdl-ecto { color: #8b5cf6; }
 
 /* ── Goal Ring ── */
 .goal-ring-wrap { display: flex; justify-content: center; }

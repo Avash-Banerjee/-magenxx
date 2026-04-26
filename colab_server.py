@@ -22,7 +22,7 @@ from pyngrok import ngrok
 # ─────────────────────────────────────────────
 #  PUT YOUR NGROK AUTHTOKEN HERE
 # ─────────────────────────────────────────────
-NGROK_TOKEN = "YOUR_NGROK_AUTHTOKEN_HERE"
+NGROK_TOKEN = "3Az9UffNLvPvkNpZ25EzrCJDIHQ_2tYT4GwAftRkmhXowtkGb"
 # ─────────────────────────────────────────────
 
 ngrok.set_auth_token(NGROK_TOKEN)
