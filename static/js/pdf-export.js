@@ -281,6 +281,8 @@ async function exportScanPDF() {
     const skeletalRatios = pose.skeletal_ratios || {};
     const symScores     = pose.symmetry_scores || {};
     const proportions   = pose.body_proportions || {};
+    const jointAngles   = pose.joint_angles_deg || {};
+    const structAngles  = pose.structural_angles_deg || {};
 
     const endo = scan.endomorphy || 0;
     const meso = scan.mesomorphy || 0;
@@ -477,6 +479,7 @@ async function exportScanPDF() {
         'Section 6   Limb Lengths & Skeletal Proportions',
         'Section 7   Body Ratios & Indices',
         'Section 8   Symmetry Analysis',
+        'Section 8b  Joint & Structural Angles',
         'Section 9   Training Recommendations',
         'Section 10  Weekly Exercise Plan',
         'Section 11  Nutrition & Calorie Analysis',
@@ -848,6 +851,66 @@ async function exportScanPDF() {
             }
         });
         y += 5;
+    }
+
+    // ────────────────────────────────────────────────────────
+    //  SECTION 8b: JOINT & STRUCTURAL ANGLES
+    // ────────────────────────────────────────────────────────
+    const hasJointAngles  = Object.keys(jointAngles).length > 0;
+    const hasStructAngles = Object.keys(structAngles).length > 0;
+    if (hasJointAngles || hasStructAngles) {
+        y = secHead(y, '8b.', 'Joint & Structural Angles (MediaPipe)', [30, 41, 59]);
+
+        const JOINT_ANGLE_META = {
+            left_knee_angle:       { label: 'Knee Flexion',          side: 'L', healthy: '~170–180° standing' },
+            right_knee_angle:      { label: 'Knee Flexion',          side: 'R', healthy: '~170–180° standing' },
+            left_hip_angle:        { label: 'Hip Flexion',           side: 'L', healthy: '~170–180° standing' },
+            right_hip_angle:       { label: 'Hip Flexion',           side: 'R', healthy: '~170–180° standing' },
+            left_elbow_angle:      { label: 'Elbow Flexion',         side: 'L', healthy: '~160–180° relaxed' },
+            right_elbow_angle:     { label: 'Elbow Flexion',         side: 'R', healthy: '~160–180° relaxed' },
+            left_shoulder_angle:   { label: 'Shoulder Abduction',    side: 'L', healthy: 'ROM-dependent' },
+            right_shoulder_angle:  { label: 'Shoulder Abduction',    side: 'R', healthy: 'ROM-dependent' },
+            left_ankle_angle:      { label: 'Ankle Dorsiflexion',    side: 'L', healthy: '~80–90° neutral' },
+            right_ankle_angle:     { label: 'Ankle Dorsiflexion',    side: 'R', healthy: '~80–90° neutral' },
+            left_q_angle:          { label: 'Q-Angle (knee valgus)', side: 'L', healthy: '< 15° male / < 20° female' },
+            right_q_angle:         { label: 'Q-Angle (knee valgus)', side: 'R', healthy: '< 15° male / < 20° female' },
+            left_wrist_angle:      { label: 'Wrist Flexion',         side: 'L', healthy: '~165–180° neutral' },
+            right_wrist_angle:     { label: 'Wrist Flexion',         side: 'R', healthy: '~165–180° neutral' },
+            left_neck_angle:       { label: 'Neck-Torso Angle',      side: 'L', healthy: '~150–170° upright posture' },
+            right_neck_angle:      { label: 'Neck-Torso Angle',      side: 'R', healthy: '~150–170° upright posture' },
+            left_foot_arch_angle:  { label: 'Foot Arch',             side: 'L', healthy: '~120–150° normal arch' },
+            right_foot_arch_angle: { label: 'Foot Arch',             side: 'R', healthy: '~120–150° normal arch' },
+        };
+
+        if (hasJointAngles) {
+            y = subHead(y, 'Joint Angles');
+            let alt = false;
+            Object.entries(jointAngles).forEach(([key, val]) => {
+                const meta = JOINT_ANGLE_META[key] || { label: key.replace(/_/g,' '), side: '—', healthy: '—' };
+                y = kv(y, `${meta.label} (${meta.side})  —  ${meta.healthy}`, `${Number(val).toFixed(1)}°`, alt);
+                alt = !alt;
+            });
+            y += 4;
+        }
+
+        if (hasStructAngles) {
+            y = subHead(y, 'Structural / Alignment Angles');
+            const STRUCT_META = {
+                shoulder_tilt_deg: { label: 'Shoulder Tilt',      healthy: '< ±3° level',       assess: v => Math.abs(v) < 3  ? 'Good' : 'Uneven' },
+                hip_tilt_deg:      { label: 'Hip Tilt',           healthy: '< ±3° level',        assess: v => Math.abs(v) < 3  ? 'Good' : 'Uneven' },
+                trunk_lean_deg:    { label: 'Trunk Lean',         healthy: '< ±5° upright',      assess: v => Math.abs(v) < 5  ? 'Good' : 'Leaning' },
+                head_tilt_deg:     { label: 'Head Tilt',          healthy: '< ±5° level',        assess: v => Math.abs(v) < 5  ? 'Good' : 'Tilted' },
+                forward_head_deg:  { label: 'Forward Head Posture', healthy: '< 10° ideal / > 20° FHP risk', assess: v => v < 10 ? 'Good' : v < 20 ? 'Mild FHP' : 'FHP Risk' },
+            };
+            let alt = false;
+            Object.entries(structAngles).forEach(([key, val]) => {
+                const meta = STRUCT_META[key] || { label: key.replace(/_/g,' '), healthy: '—', assess: () => '—' };
+                const note = meta.assess(Number(val));
+                y = kv(y, `${meta.label}  —  ${meta.healthy}`, `${Number(val).toFixed(1)}°  (${note})`, alt);
+                alt = !alt;
+            });
+            y += 5;
+        }
     }
 
     // ────────────────────────────────────────────────────────

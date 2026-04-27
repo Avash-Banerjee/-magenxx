@@ -363,6 +363,71 @@ function renderSymmetry(symmetry) {
     }
 }
 
+// ── Joint & structural angles ──
+function renderAngles(jointAngles, structuralAngles) {
+    const card = document.getElementById("anglesCard");
+    if (!card) return;
+    card.style.display = "block";
+
+    const JOINT_LABELS = {
+        left_knee_angle:       ["Knee",          "Left"],
+        right_knee_angle:      ["Knee",          "Right"],
+        left_hip_angle:        ["Hip",           "Left"],
+        right_hip_angle:       ["Hip",           "Right"],
+        left_elbow_angle:      ["Elbow",         "Left"],
+        right_elbow_angle:     ["Elbow",         "Right"],
+        left_shoulder_angle:   ["Shoulder",      "Left"],
+        right_shoulder_angle:  ["Shoulder",      "Right"],
+        left_ankle_angle:      ["Ankle",         "Left"],
+        right_ankle_angle:     ["Ankle",         "Right"],
+        left_q_angle:          ["Q-Angle",       "Left"],
+        right_q_angle:         ["Q-Angle",       "Right"],
+        left_wrist_angle:      ["Wrist",         "Left"],
+        right_wrist_angle:     ["Wrist",         "Right"],
+        left_neck_angle:       ["Neck-Torso",    "Left"],
+        right_neck_angle:      ["Neck-Torso",    "Right"],
+        left_foot_arch_angle:  ["Foot Arch",     "Left"],
+        right_foot_arch_angle: ["Foot Arch",     "Right"],
+    };
+
+    // Joint angles table
+    if (jointAngles) {
+        const tbody = document.querySelector("#jointAnglesTable tbody");
+        tbody.innerHTML = "";
+        for (const [key, deg] of Object.entries(jointAngles)) {
+            const [joint, side] = JOINT_LABELS[key] || [key, "—"];
+            const row = tbody.insertRow();
+            row.insertCell().textContent = joint;
+            row.insertCell().innerHTML = `<strong>${deg.toFixed(1)}°</strong>`;
+            const sideCell = row.insertCell();
+            sideCell.textContent = side;
+            sideCell.style.color = side === "Left" ? "var(--blue,#60a5fa)" : "var(--orange,#fb923c)";
+        }
+    }
+
+    // Structural angles table with posture notes
+    if (structuralAngles) {
+        const STRUCT_META = {
+            shoulder_tilt_deg:  ["Shoulder Tilt",     v => Math.abs(v) < 3  ? "✅ Level"       : "⚠️ Uneven"],
+            hip_tilt_deg:       ["Hip Tilt",          v => Math.abs(v) < 3  ? "✅ Level"       : "⚠️ Uneven"],
+            trunk_lean_deg:     ["Trunk Lean",        v => Math.abs(v) < 5  ? "✅ Upright"     : "⚠️ Leaning"],
+            head_tilt_deg:      ["Head Tilt",         v => Math.abs(v) < 5  ? "✅ Level"       : "⚠️ Tilted"],
+            forward_head_deg:   ["Forward Head",      v => v < 10           ? "✅ Good posture" : v < 20 ? "⚠️ Mild FHP" : "❌ FHP"],
+        };
+        const tbody = document.querySelector("#structuralAnglesTable tbody");
+        tbody.innerHTML = "";
+        for (const [key, val] of Object.entries(structuralAngles)) {
+            const meta = STRUCT_META[key];
+            const label = meta ? meta[0] : key.replace(/_/g, " ");
+            const note  = meta ? meta[1](val) : "—";
+            const row = tbody.insertRow();
+            row.insertCell().textContent = label;
+            row.insertCell().innerHTML = `<strong>${val.toFixed(1)}°</strong>`;
+            row.insertCell().innerHTML = `<span style="font-size:0.8rem;">${note}</span>`;
+        }
+    }
+}
+
 // ── Save scan results to DB ──
 async function saveScanResults(poseData, colabData) {
     const scanData = {
@@ -378,6 +443,10 @@ async function saveScanResults(poseData, colabData) {
             symmetry_scores: poseData.symmetry_scores,
             body_proportions: poseData.body_proportions,
             skeletal_ratios: poseData.skeletal_ratios,
+            joint_angles_deg: poseData.joint_angles_deg,
+            structural_angles_deg: poseData.structural_angles_deg,
+            landmarks_detected: poseData.landmarks_detected,
+            px_per_cm: poseData.px_per_cm,
         },
         hmr_data: {
             measurements_cm: colabData.measurements_cm,
@@ -555,6 +624,11 @@ document.getElementById("classifyForm").addEventListener("submit", async functio
                 row.insertCell().textContent = k;
                 row.insertCell().textContent = v.toFixed(3);
             }
+        }
+
+        // Joint & structural angles
+        if (poseData.joint_angles_deg || poseData.structural_angles_deg) {
+            renderAngles(poseData.joint_angles_deg, poseData.structural_angles_deg);
         }
 
         // Joint segments

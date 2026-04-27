@@ -242,12 +242,36 @@
     <div class="card">
         <h2>📏 Joint Segment Lengths</h2>
         <p style="color:var(--text-dim); font-size:0.8rem; margin-bottom:12px;">
-            Measured via MediaPipe landmarks. CM values derived from your height.
+            Measured via MediaPipe landmarks. CM values derived from full standing height (crown of head to floor).
         </p>
         <table class="measurements-table" id="segmentsTable">
             <thead><tr><th>Segment</th><th>Pixels</th><th>Estimated CM</th></tr></thead>
             <tbody></tbody>
         </table>
+    </div>
+
+    <!-- Joint Angles -->
+    <div class="card" id="anglesCard" style="display:none;">
+        <h2>📐 Joint & Structural Angles</h2>
+        <p style="color:var(--text-dim); font-size:0.8rem; margin-bottom:16px;">
+            Computed from MediaPipe landmarks in 2D image space. Structural angles measure alignment deviation from ideal posture.
+        </p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+            <div>
+                <div class="section-divider">Joint Angles</div>
+                <table class="measurements-table" id="jointAnglesTable">
+                    <thead><tr><th>Joint</th><th>Angle</th><th>Side</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div>
+                <div class="section-divider">Structural / Alignment</div>
+                <table class="measurements-table" id="structuralAnglesTable">
+                    <thead><tr><th>Angle</th><th>Value</th><th>Note</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- HMR + Ratios -->
